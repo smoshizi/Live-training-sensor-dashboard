@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Piezo Sensor Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f6fb;color:#1f2937}
+  header{background:white;padding:18px 26px;box-shadow:0 2px 10px rgba(0,0,0,.08);display:flex;justify-content:space-between;align-items:center}
+  h1{margin:0;font-size:24px}
+  .badges span{background:#e8f5e9;color:#166534;padding:8px 12px;border-radius:20px;margin-left:8px;font-size:13px}
+  .container{padding:20px;max-width:1450px;margin:auto}
+  .metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px}
+  .card{background:white;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+  .metric-title{font-size:13px;color:#6b7280}.metric-value{font-size:22px;font-weight:700;margin-top:6px}.metric-sub{font-size:12px;color:#9ca3af;margin-top:4px}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}.tabs button{border:0;background:white;padding:12px 18px;border-radius:14px;font-weight:600;cursor:pointer}.tabs button.active{background:#111827;color:white}
+  .tab{display:none}.tab.active{display:block}
+  .main-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+  .plots-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .side-title{text-align:center;background:#eef2f7;padding:10px;border-radius:14px;font-weight:700;margin-bottom:10px}
+  .plot-card{background:white;border-radius:14px;padding:10px;margin-bottom:10px;border:1px solid #e5e7eb}
+  .plot-title{font-weight:700;margin-bottom:5px}
+  canvas{width:100%!important;height:125px!important}
+  .slab{height:420px;border:3px solid #cbd5e1;background:#f8fafc;border-radius:18px;position:relative}
+  .sensor{position:absolute;width:42px;height:42px;border-radius:50%;background:white;border:2px solid #111827;display:flex;align-items:center;justify-content:center;font-weight:700;transform:translate(-50%,-50%)}
+  .arrow{position:absolute;left:50%;top:50px;height:310px;border-left:3px dashed #64748b}
+  .training-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}
+  .training-buttons button,.control-btn{border:0;border-radius:16px;padding:18px;background:#111827;color:white;font-size:16px;font-weight:700;cursor:pointer}
+  .control-btn.secondary{background:#e5e7eb;color:#111827}
+  .status{padding:12px 16px;border-radius:14px;background:#fff7ed;color:#9a3412;margin-bottom:14px}
+  .status.on{background:#ecfdf5;color:#047857}
+  .progress-row{margin:14px 0}.bar{height:12px;background:#e5e7eb;border-radius:8px;overflow:hidden}.fill{height:100%;background:#111827}
+  .event{display:flex;justify-content:space-between;align-items:center;background:white;padding:14px;border-radius:14px;margin-bottom:10px;border:1px solid #e5e7eb;cursor:pointer}.event.selected{outline:3px solid #111827}
+  .features{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.feature{background:#f8fafc;padding:12px;border-radius:12px}
+  .gauge{height:90px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800}
+  @media(max-width:1000px){.metrics{grid-template-columns:repeat(2,1fr)}.main-grid,.plots-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>8-Sensor Piezo Load Classification Dashboard</h1>
+    <div style="color:#6b7280;font-size:14px">Live monitoring, SD logging, training, and classification</div>
+  </div>
+  <div class="badges"><span>MQTT Online</span><span>SD Active</span><span>KNN Ready</span></div>
+</header>
+
+<div class="container">
+  <div class="metrics">
+    <div class="card"><div class="metric-title">Sampling</div><div class="metric-value">100 Hz</div><div class="metric-sub">10 ms/sample</div></div>
+    <div class="card"><div class="metric-title">CSV File</div><div class="metric-value" style="font-size:15px">piezoA_20260512_171350.csv</div><div class="metric-sub">session based</div></div>
+    <div class="card"><div class="metric-title">Free SD</div><div class="metric-value">59.1 GB</div><div class="metric-sub">auto-delete below 500 MB</div></div>
+    <div class="card"><div class="metric-title">Last Class</div><div class="metric-value">🚗 Light Car</div><div class="metric-sub">confidence 84%</div></div>
+    <div class="card"><div class="metric-title">Temperature</div><div class="gauge" id="tempGauge">24.6°C</div><div class="metric-sub">environment</div></div>
+    <div class="card"><div class="metric-title">Humidity</div><div class="gauge" id="humGauge">58%</div><div class="metric-sub">environment</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="active" onclick="showTab('live',this)">Live Plots</button>
+    <button onclick="showTab('training',this)">Training</button>
+    <button onclick="showTab('review',this)">Review</button>
+    <button onclick="showTab('classify',this)">Classify</button>
+  </div>
+
+  <section id="live" class="tab active">
+    <div class="main-grid">
+      <div class="card">
+        <h2>Live Sensor Plots — 20 s Window</h2>
+        <div class="plots-grid">
+          <div>
+            <div class="side-title">System B — Left Side</div>
+            <div id="bPlots"></div>
+          </div>
+          <div>
+            <div class="side-title">System A — Right Side</div>
+            <div id="aPlots"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Concrete Slab Sensor Map</h2>
+        <div class="slab">
+          <div style="position:absolute;left:20px;top:15px;color:#64748b;font-size:13px">Vehicle direction: top → bottom</div>
+          <div class="arrow"></div>
+          <div class="sensor" style="left:50%;top:12%">B1</div>
+          <div class="sensor" style="left:90%;top:12%">A1</div>
+          <div class="sensor" style="left:90%;top:35%">A2</div>
+          <div class="sensor" style="left:50%;top:50%">B2</div>
+          <div class="sensor" style="left:64%;top:50%">B4</div>
+          <div class="sensor" style="left:90%;top:50%">A3</div>
+          <div class="sensor" style="left:50%;top:88%">B3</div>
+          <div class="sensor" style="left:64%;top:88%">A4</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="training" class="tab">
+    <div class="main-grid">
+      <div class="card">
+        <h2>Training Mode — Label Detected Events</h2>
+        <div id="trainStatus" class="status">Training paused. Click Start Training first.</div>
+        <div class="features">
+          <div class="feature"><b>Active sensors</b><br>5 / 8</div>
+          <div class="feature"><b>Total energy</b><br>810</div>
+          <div class="feature"><b>Duration</b><br>0.82 s</div>
+          <div class="feature"><b>Top→bottom score</b><br>0.76</div>
+        </div>
+        <div class="training-buttons">
+          <button onclick="addTraining('Pedestrian')">🚶 Pedestrian (P)</button>
+          <button onclick="addTraining('Light car')">🚗 Light Car (L)</button>
+          <button onclick="addTraining('Heavy car')">🚛 Heavy Car (H)</button>
+        </div>
+        <div id="progressArea"></div>
+      </div>
+      <div class="card">
+        <h2>Controls</h2>
+        <button class="control-btn" onclick="toggleTraining()" id="startBtn">Start Training</button><br><br>
+        <button class="control-btn secondary" onclick="alert('KNN model trained using labelled events.')">Train KNN Model</button><br><br>
+        <button class="control-btn secondary" onclick="clearSelectedEvent()">Clear Selected Event</button>
+        <p style="color:#6b7280">Target: 30 labelled events per class. Press P/L/H only after the dashboard detects a complete event.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="review" class="tab">
+    <div class="card">
+      <h2>Features Used by Classifier</h2>
+      <div class="features">
+        <div class="feature">Peak amplitude per sensor</div>
+        <div class="feature">Event duration</div>
+        <div class="feature">Sub-peak count</div>
+        <div class="feature">Area / energy per sensor</div>
+        <div class="feature">Weighted X/Y activation centroid</div>
+        <div class="feature">Spatial spread radius</div>
+        <div class="feature">Top-to-bottom firing order score</div>
+        <div class="feature">Energy balance between A and B</div>
+        <div class="feature">Number of active sensors</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="classify" class="tab">
+    <div class="main-grid">
+      <div class="card">
+        <h2>Real-Time Classification Feed</h2>
+        <div id="eventFeed"></div>
+      </div>
+      <div class="card">
+        <h2>Current Event</h2>
+        <div style="text-align:center;font-size:58px">🚗</div>
+        <h2 style="text-align:center">Light Car</h2>
+        <p style="text-align:center;color:#6b7280">KNN vote: 4 / 5</p>
+        <div class="feature">Energy balance: 0.22</div><br>
+        <div class="feature">Top→bottom score: 0.71</div><br>
+        <div class="feature">Active sensors: 5</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const sensorIdsA = ["A1","A2","A3","A4"];
+const sensorIdsB = ["B1","B2","B3","B4"];
+const charts = {};
+let tick = 0;
+let trainingActive = false;
+let counts = {"Pedestrian":13,"Light car":11,"Heavy car":10};
+let target = 30;
+let selectedEvent = null;
+let events = [
+  {time:"17:23:41.450", label:"Heavy car", conf:92, icon:"🚛"},
+  {time:"17:23:44.120", label:"Light car", conf:84, icon:"🚗"},
+  {time:"17:23:51.880", label:"Pedestrian", conf:96, icon:"🚶"},
+  {time:"17:24:02.010", label:"Pedestrian", conf:89, icon:"🚶"},
+  {time:"17:24:18.340", label:"Light car", conf:79, icon:"🚗"}
+];
+
+function showTab(id, btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function makePlot(id, parent){
+  const div=document.createElement('div'); div.className='plot-card';
+  div.innerHTML=`<div class="plot-title">${id}</div><canvas id="chart_${id}"></canvas>`;
+  parent.appendChild(div);
+  const ctx=document.getElementById(`chart_${id}`);
+  charts[id]=new Chart(ctx,{
+    type:'line',
+    data:{labels:Array.from({length:200},(_,i)=>(-20+i*0.1).toFixed(1)),datasets:[{label:id,data:Array(200).fill(0),borderWidth:2,pointRadius:0,tension:.25}]},
+    options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+  });
+}
+sensorIdsB.forEach(id=>makePlot(id,document.getElementById('bPlots')));
+sensorIdsA.forEach(id=>makePlot(id,document.getElementById('aPlots')));
+
+function updateCharts(){
+  tick++;
+  Object.keys(charts).forEach((id, idx)=>{
+    const arr=charts[id].data.datasets[0].data;
+    arr.shift();
+    const pulse=Math.exp(-Math.pow(((tick%90)-45-idx*2)/10,2))*(20+idx*9);
+    const noise=Math.max(0,Math.sin((tick+idx*12)/8)*3);
+    arr.push(pulse+noise);
+    charts[id].update();
+  });
+  document.getElementById('tempGauge').textContent=(24+Math.sin(tick/80)*1.2).toFixed(1)+"°C";
+  document.getElementById('humGauge').textContent=Math.round(58+Math.sin(tick/100)*5)+"%";
+}
+setInterval(updateCharts,100);
+
+function toggleTraining(){
+  trainingActive=!trainingActive;
+  document.getElementById('startBtn').textContent=trainingActive?"Pause Training":"Start Training";
+  const s=document.getElementById('trainStatus');
+  s.className=trainingActive?"status on":"status";
+  s.textContent=trainingActive?"Training active. Press P/L/H after a complete event is detected.":"Training paused. Click Start Training first.";
+}
+
+function addTraining(label){
+  const s=document.getElementById('trainStatus');
+  if(!trainingActive){
+    s.className="status";
+    s.textContent="Training is paused. Click Start Training first.";
+    return;
+  }
+  counts[label]++;
+  s.className="status on";
+  s.textContent="Added 1 "+label+" event.";
+  renderProgress();
+}
+document.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k==='p') addTraining('Pedestrian');
+  if(k==='l') addTraining('Light car');
+  if(k==='h') addTraining('Heavy car');
+});
+
+function renderProgress(){
+  const area=document.getElementById('progressArea');
+  area.innerHTML='';
+  Object.keys(counts).forEach(label=>{
+    const pct=Math.min(100,counts[label]/target*100);
+    area.innerHTML+=`<div class="progress-row"><div><b>${label}</b> — ${counts[label]} / ${target}</div><div class="bar"><div class="fill" style="width:${pct}%"></div></div></div>`;
+  });
+}
+renderProgress();
+
+function renderEvents(){
+  const feed=document.getElementById('eventFeed'); feed.innerHTML='';
+  events.forEach((e,i)=>{
+    const div=document.createElement('div');
+    div.className='event'+(selectedEvent===i?' selected':'');
+    div.onclick=()=>{selectedEvent=i;renderEvents();};
+    div.innerHTML=`<div><b>${e.icon} ${e.label}</b><br><span style="color:#6b7280">${e.time}</span></div><div>${e.conf}% confidence</div>`;
+    feed.appendChild(div);
+  });
+}
+function clearSelectedEvent(){
+  if(selectedEvent===null){alert('Click an event first.');return;}
+  events.splice(selectedEvent,1); selectedEvent=null; renderEvents();
+}
+renderEvents();
+</script>
+</body>
+</html>
