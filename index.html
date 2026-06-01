@@ -152,7 +152,7 @@
 
   canvas{
     width:100%!important;
-    height:125px!important;
+    height:145px!important;
   }
 
   .slab{
@@ -282,6 +282,41 @@
     font-weight:800;
   }
 
+  .gauge-ring{
+    width:90px;
+    height:90px;
+    margin:auto;
+    border-radius:50%;
+    background:conic-gradient(#111827 0%, #e5e7eb 0%);
+    position:relative;
+  }
+
+  .gauge-ring::before{
+    content:"";
+    position:absolute;
+    width:66px;
+    height:66px;
+    border-radius:50%;
+    background:white;
+  }
+
+  .gauge-inner{
+    position:relative;
+    z-index:1;
+    text-align:center;
+    line-height:1;
+  }
+
+  .gauge-inner div{
+    font-size:22px;
+    font-weight:800;
+  }
+
+  .gauge-inner small{
+    font-size:12px;
+    color:#64748b;
+  }
+
   .mqtt-log{
     font-family:Consolas,monospace;
     background:#0f172a;
@@ -360,13 +395,23 @@
 
     <div class="card">
       <div class="metric-title">Temperature</div>
-      <div class="gauge" id="tempGauge">-- °C</div>
+      <div class="gauge gauge-ring" id="tempGauge">
+        <div class="gauge-inner">
+          <div id="tempValue">--</div>
+          <small>°C</small>
+        </div>
+      </div>
       <div class="metric-sub">from iot/tempB</div>
     </div>
 
     <div class="card">
       <div class="metric-title">Humidity</div>
-      <div class="gauge" id="humGauge">-- %</div>
+      <div class="gauge gauge-ring" id="humGauge">
+        <div class="gauge-inner">
+          <div id="humValue">--</div>
+          <small>%</small>
+        </div>
+      </div>
       <div class="metric-sub">from iot/tempB</div>
     </div>
   </div>
@@ -523,8 +568,8 @@
         </div>
 
         <p style="color:#6b7280">
-          GitHub Pages requires MQTT over WebSocket, for example <b>wss://...</b>.
-          Normal MQTT port 1883 will not work directly in the browser.
+          GitHub Pages requires MQTT over WebSocket. This dashboard uses HiveMQ WebSocket:
+          <b>wss://broker.hivemq.com:8884/mqtt</b>
         </p>
       </div>
 
@@ -554,11 +599,17 @@ const MQTT_CONFIG = {
   }
 };
 
+const SAMPLE_RATE_HZ = 100;
+const WINDOW_SECONDS = 20;
+const CHART_POINTS = SAMPLE_RATE_HZ * WINDOW_SECONDS;
+const SAMPLE_INTERVAL_MS = 1000 / SAMPLE_RATE_HZ;
+
 const sensorIdsA = ["A1", "A2", "A3", "A4"];
 const sensorIdsB = ["B1", "B2", "B3", "B4"];
 const allSensors = [...sensorIdsB, ...sensorIdsA];
 
 const charts = {};
+
 const latestSensorValues = {
   A1: 0, A2: 0, A3: 0, A4: 0,
   B1: 0, B2: 0, B3: 0, B4: 0
@@ -576,6 +627,7 @@ let lastPiezoMessageTime = 0;
 let tick = 0;
 
 let eventHistoryBuffer = [];
+
 let currentFeatures = {
   activeSensors: 0,
   totalEnergy: 0,
@@ -585,6 +637,7 @@ let currentFeatures = {
 };
 
 let trainingActive = false;
+
 let counts = {
   "Pedestrian": 0,
   "Light car": 0,
@@ -601,6 +654,25 @@ function showTab(id, btn){
 
   document.getElementById(id).classList.add("active");
   btn.classList.add("active");
+}
+
+function formatTimeLabel(ms){
+  const d = new Date(ms);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  const tenth = Math.floor(d.getMilliseconds() / 100);
+
+  return `${h}:${m}:${s}.${tenth}`;
+}
+
+function makeInitialTimeLabels(){
+  const now = Date.now();
+
+  return Array.from({ length: CHART_POINTS }, (_, i) => {
+    const t = now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS;
+    return formatTimeLabel(t);
+  });
 }
 
 function logMqtt(message){
@@ -645,6 +717,7 @@ function updateLastMqttTime(){
 function makePlot(id, parent){
   const div = document.createElement("div");
   div.className = "plot-card";
+
   div.innerHTML = `
     <div class="plot-title">
       <span>${id}</span>
@@ -660,25 +733,40 @@ function makePlot(id, parent){
   charts[id] = new Chart(ctx, {
     type: "line",
     data: {
-      labels: Array.from({ length: 200 }, (_, i) => i),
+      labels: makeInitialTimeLabels(),
       datasets: [{
         label: id,
-        data: Array(200).fill(0),
+        data: Array(CHART_POINTS).fill(0),
         borderWidth: 2,
         pointRadius: 0,
-        tension: 0.15
+        tension: 0.15,
+        spanGaps: true
       }]
     },
     options: {
       animation: false,
       responsive: true,
       maintainAspectRatio: false,
+      parsing: false,
       plugins: {
         legend: { display: false }
       },
       scales: {
-        x: { display: false },
-        y: { display: true }
+        x: {
+          display: true,
+          ticks: {
+            maxTicksLimit: 6,
+            maxRotation: 0,
+            autoSkip: true
+          },
+          title: {
+            display: true,
+            text: "Real time"
+          }
+        },
+        y: {
+          display: true
+        }
       }
     }
   });
@@ -698,7 +786,7 @@ function setSensorActive(sensorId, value){
   }
 }
 
-function pushChartValue(sensorId, value){
+function pushChartValue(sensorId, value, timestampMs = Date.now()){
   if (!charts[sensorId]) return;
 
   const numericValue = Number(value) || 0;
@@ -706,9 +794,14 @@ function pushChartValue(sensorId, value){
 
   const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
+  const labels = chart.data.labels;
 
   arr.shift();
+  labels.shift();
+
   arr.push(numericValue);
+  labels.push(formatTimeLabel(timestampMs));
+
   chart.update("none");
 
   const valueText = document.getElementById("value_" + sensorId);
@@ -724,19 +817,27 @@ function pushChartBatch(sensorId, samples){
 
   const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
+  const labels = chart.data.labels;
 
-  samples.forEach(sample => {
+  const batchStartTime = Date.now() - (samples.length - 1) * SAMPLE_INTERVAL_MS;
+
+  samples.forEach((sample, index) => {
     const numericValue = Number(sample.v) || 0;
+    const liveTimestamp = batchStartTime + index * SAMPLE_INTERVAL_MS;
 
     arr.shift();
+    labels.shift();
+
     arr.push(numericValue);
+    labels.push(formatTimeLabel(liveTimestamp));
 
     latestSensorValues[sensorId] = numericValue;
 
     eventHistoryBuffer.push({
       sensorId,
       value: numericValue,
-      ts: Number(sample.ts) || Date.now()
+      ts: liveTimestamp,
+      deviceTs: Number(sample.ts) || null
     });
   });
 
@@ -814,16 +915,46 @@ function parseEnvPayload(payloadText){
   );
 }
 
-function updateEnvironmentDisplay(){
-  document.getElementById("tempGauge").textContent =
-    latestEnvironment.temperature.toFixed(1) + "°C";
+function setGauge(gaugeId, valueId, value, min, max, decimals){
+  const gauge = document.getElementById(gaugeId);
+  const valueText = document.getElementById(valueId);
 
-  document.getElementById("humGauge").textContent =
-    Math.round(latestEnvironment.humidity) + "%";
+  if (!gauge || !valueText) return;
+
+  const numericValue = Number(value) || 0;
+  const clamped = Math.max(min, Math.min(max, numericValue));
+  const percent = ((clamped - min) / (max - min)) * 100;
+
+  gauge.style.background =
+    `conic-gradient(#111827 ${percent}%, #e5e7eb ${percent}% 100%)`;
+
+  valueText.textContent = numericValue.toFixed(decimals);
+}
+
+function updateEnvironmentDisplay(){
+  setGauge(
+    "tempGauge",
+    "tempValue",
+    latestEnvironment.temperature,
+    -10,
+    50,
+    1
+  );
+
+  setGauge(
+    "humGauge",
+    "humValue",
+    latestEnvironment.humidity,
+    0,
+    100,
+    0
+  );
 }
 
 function generateRandomFallbackData(){
   tick++;
+
+  const now = Date.now();
 
   allSensors.forEach((id, idx) => {
     const pulse =
@@ -832,7 +963,7 @@ function generateRandomFallbackData(){
     const noise =
       Math.sin((tick + idx * 12) / 5) * 3 + (Math.random() - 0.5) * 2;
 
-    pushChartValue(id, pulse + noise);
+    pushChartValue(id, pulse + noise, now);
   });
 
   latestEnvironment.temperature =
@@ -850,8 +981,7 @@ function updateFeatures(){
   const nowTs = Date.now();
 
   eventHistoryBuffer = eventHistoryBuffer.filter(item => {
-    const itemTime = item.ts > 2000000000000 ? item.ts : nowTs;
-    return nowTs - itemTime < recentWindowMs || eventHistoryBuffer.length < 1000;
+    return nowTs - item.ts < recentWindowMs;
   });
 
   const absValues = Object.values(latestSensorValues).map(v => Math.abs(v));
