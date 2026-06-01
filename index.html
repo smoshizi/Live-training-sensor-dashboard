@@ -540,12 +540,7 @@
 const MQTT_CONFIG = {
   enabled: true,
 
-  // CHANGE THIS TO YOUR REAL MQTT-OVER-WEBSOCKET BROKER.
-  // Examples:
-  // brokerUrl: "wss://broker.emqx.io:8084/mqtt"
-  // brokerUrl: "ws://192.168.1.50:8083/mqtt"
-  // brokerUrl: "wss://your-domain.com:8084/mqtt"
-  brokerUrl: "wss://broker.emqx.io:8084/mqtt",
+  brokerUrl: "wss://broker.hivemq.com:8884/mqtt",
 
   topicPiezoA: "iot/piezoA",
   topicPiezoB: "iot/piezoB",
@@ -556,10 +551,6 @@ const MQTT_CONFIG = {
     clean: true,
     reconnectPeriod: 3000,
     connectTimeout: 8000
-
-    // If your broker needs authentication, add:
-    // username: "YOUR_USERNAME",
-    // password: "YOUR_PASSWORD"
   }
 };
 
