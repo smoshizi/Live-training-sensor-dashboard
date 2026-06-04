@@ -765,7 +765,14 @@ function makePlot(id, parent){
           }
         },
         y: {
-          display: true
+          display: true,
+          ticks: {
+            maxTicksLimit: 5
+          },
+          title: {
+            display: true,
+            text: "Piezo value"
+          }
         }
       }
     }
@@ -812,6 +819,28 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
   setSensorActive(sensorId, numericValue);
 }
 
+function updateDynamicYAxis(chart){
+  const values = chart.data.datasets[0].data
+    .map(Number)
+    .filter(v => Number.isFinite(v));
+
+  if (values.length === 0) return;
+
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+
+  // Avoid a flat 0–1 axis when data is constant or nearly constant.
+  if (Math.abs(max - min) < 0.5) {
+    min -= 1;
+    max += 1;
+  }
+
+  const padding = (max - min) * 0.15;
+
+  chart.options.scales.y.min = min - padding;
+  chart.options.scales.y.max = max + padding;
+}
+  
 function pushChartBatch(sensorId, samples){
   if (!charts[sensorId] || !Array.isArray(samples)) return;
 
@@ -841,6 +870,7 @@ function pushChartBatch(sensorId, samples){
     });
   });
 
+  updateDynamicYAxis(chart);
   chart.update("none");
 
   const lastSample = samples[samples.length - 1];
