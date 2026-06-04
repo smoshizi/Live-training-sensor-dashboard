@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Live Training Sensor Dashboard</title>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
 <style>
@@ -362,7 +362,7 @@
 
   <div class="badges">
     <span id="mqttBadge">MQTT Connecting</span>
-    <span id="dataBadge">Random Sensor Fallback</span>
+    <span id="dataBadge">Random Fallback</span>
     <span>KNN Ready</span>
   </div>
 </header>
@@ -384,7 +384,7 @@
     <div class="card">
       <div class="metric-title">Last MQTT Message</div>
       <div class="metric-value" id="lastMqttTime" style="font-size:16px">None yet</div>
-      <div class="metric-sub">piezo/env tracked separately</div>
+      <div class="metric-sub">falls back after 3 seconds</div>
     </div>
 
     <div class="card">
@@ -584,10 +584,13 @@
 <script>
 const MQTT_CONFIG = {
   enabled: true,
+
   brokerUrl: "wss://broker.hivemq.com:8884/mqtt",
+
   topicPiezoA: "iot/piezoA",
   topicPiezoB: "iot/piezoB",
   topicEnv: "iot/tempB",
+
   options: {
     clientId: "live_training_dashboard_" + Math.random().toString(16).slice(2),
     clean: true,
@@ -621,8 +624,8 @@ let mqttClient = null;
 let mqttConnected = false;
 let lastMqttMessageTime = 0;
 let lastPiezoMessageTime = 0;
-let lastEnvMessageTime = 0;
 let tick = 0;
+
 let eventHistoryBuffer = [];
 
 let currentFeatures = {
@@ -648,6 +651,7 @@ let events = [];
 function showTab(id, btn){
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+
   document.getElementById(id).classList.add("active");
   btn.classList.add("active");
 }
@@ -658,11 +662,13 @@ function formatTimeLabel(ms){
   const m = String(d.getMinutes()).padStart(2, "0");
   const s = String(d.getSeconds()).padStart(2, "0");
   const tenth = Math.floor(d.getMilliseconds() / 100);
+
   return `${h}:${m}:${s}.${tenth}`;
 }
 
 function makeInitialTimeLabels(){
   const now = Date.now();
+
   return Array.from({ length: CHART_POINTS }, (_, i) => {
     const t = now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS;
     return formatTimeLabel(t);
@@ -676,8 +682,9 @@ function logMqtt(message){
   const time = new Date().toLocaleTimeString();
   log.textContent = `[${time}] ${message}\n` + log.textContent;
 
-  if (log.textContent.length > 5000) {
-    log.textContent = log.textContent.slice(0, 5000);
+  const maxLength = 5000;
+  if (log.textContent.length > maxLength) {
+    log.textContent = log.textContent.slice(0, maxLength);
   }
 }
 
@@ -689,11 +696,11 @@ function updateStatusBadges(){
   mqttBadge.style.background = mqttConnected ? "#e8f5e9" : "#fee2e2";
   mqttBadge.style.color = mqttConnected ? "#166534" : "#991b1b";
 
-  const piezoDataIsFresh = mqttConnected && Date.now() - lastPiezoMessageTime < 3000;
+  const mqttDataIsFresh = mqttConnected && Date.now() - lastMqttMessageTime < 3000;
 
-  dataBadge.textContent = piezoDataIsFresh ? "Live Piezo Data" : "Random Sensor Fallback";
-  dataBadge.style.background = piezoDataIsFresh ? "#dbeafe" : "#fff7ed";
-  dataBadge.style.color = piezoDataIsFresh ? "#1d4ed8" : "#9a3412";
+  dataBadge.textContent = mqttDataIsFresh ? "Live MQTT Data" : "Random Fallback";
+  dataBadge.style.background = mqttDataIsFresh ? "#dbeafe" : "#fff7ed";
+  dataBadge.style.color = mqttDataIsFresh ? "#1d4ed8" : "#9a3412";
 }
 
 function updateLastMqttTime(){
@@ -721,20 +728,15 @@ function makePlot(id, parent){
 
   parent.appendChild(div);
 
-  const canvas = document.getElementById(`chart_${id}`);
+  const ctx = document.getElementById(`chart_${id}`);
 
-  if (typeof Chart === "undefined") {
-    div.innerHTML += `<div style="color:#b91c1c">Chart.js failed to load.</div>`;
-    return;
-  }
-
-  charts[id] = new Chart(canvas, {
+  charts[id] = new Chart(ctx, {
     type: "line",
     data: {
       labels: makeInitialTimeLabels(),
       datasets: [{
         label: id,
-        data: Array(CHART_POINTS).fill(null),
+        data: Array(CHART_POINTS).fill(0),
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.15,
@@ -746,7 +748,6 @@ function makePlot(id, parent){
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      normalized: true,
       plugins: {
         legend: { display: false }
       },
@@ -765,7 +766,6 @@ function makePlot(id, parent){
         },
         y: {
           display: true,
-          beginAtZero: false,
           ticks: {
             maxTicksLimit: 5
           },
@@ -779,16 +779,8 @@ function makePlot(id, parent){
   });
 }
 
-function createAllPlots(){
-  const bParent = document.getElementById("bPlots");
-  const aParent = document.getElementById("aPlots");
-
-  bParent.innerHTML = "";
-  aParent.innerHTML = "";
-
-  sensorIdsB.forEach(id => makePlot(id, bParent));
-  sensorIdsA.forEach(id => makePlot(id, aParent));
-}
+sensorIdsB.forEach(id => makePlot(id, document.getElementById("bPlots")));
+sensorIdsA.forEach(id => makePlot(id, document.getElementById("aPlots")));
 
 function setSensorActive(sensorId, value){
   const sensor = document.getElementById("map_" + sensorId);
@@ -801,38 +793,13 @@ function setSensorActive(sensorId, value){
   }
 }
 
-function updateDynamicYAxis(chart){
-  const values = chart.data.datasets[0].data
-    .filter(v => v !== null && v !== undefined && Number.isFinite(Number(v)))
-    .map(v => Number(v));
-
-  if (values.length === 0) {
-    chart.options.scales.y.min = -1;
-    chart.options.scales.y.max = 1;
-    return;
-  }
-
-  let min = Math.min(...values);
-  let max = Math.max(...values);
-
-  if (Math.abs(max - min) < 0.01) {
-    min -= 1;
-    max += 1;
-  }
-
-  const padding = Math.max((max - min) * 0.15, 0.5);
-
-  chart.options.scales.y.min = min - padding;
-  chart.options.scales.y.max = max + padding;
-}
-
 function pushChartValue(sensorId, value, timestampMs = Date.now()){
-  const chart = charts[sensorId];
-  if (!chart) return;
+  if (!charts[sensorId]) return;
 
   const numericValue = Number(value) || 0;
   latestSensorValues[sensorId] = numericValue;
 
+  const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
   const labels = chart.data.labels;
 
@@ -842,7 +809,6 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
   arr.push(numericValue);
   labels.push(formatTimeLabel(timestampMs));
 
-  updateDynamicYAxis(chart);
   chart.update("none");
 
   const valueText = document.getElementById("value_" + sensorId);
@@ -853,10 +819,32 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
   setSensorActive(sensorId, numericValue);
 }
 
-function pushChartBatch(sensorId, samples){
-  const chart = charts[sensorId];
-  if (!chart || !Array.isArray(samples)) return;
+function updateDynamicYAxis(chart){
+  const values = chart.data.datasets[0].data
+    .map(Number)
+    .filter(v => Number.isFinite(v));
 
+  if (values.length === 0) return;
+
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+
+  // Avoid a flat 0–1 axis when data is constant or nearly constant.
+  if (Math.abs(max - min) < 0.5) {
+    min -= 1;
+    max += 1;
+  }
+
+  const padding = (max - min) * 0.15;
+
+  chart.options.scales.y.min = min - padding;
+  chart.options.scales.y.max = max + padding;
+}
+  
+function pushChartBatch(sensorId, samples){
+  if (!charts[sensorId] || !Array.isArray(samples)) return;
+
+  const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
   const labels = chart.data.labels;
 
@@ -908,7 +896,6 @@ function parsePiezoPayload(payloadText, systemName){
   }
 
   const prefix = systemName === "A" ? "A" : "B";
-  let receivedAnySensor = false;
 
   for (let i = 1; i <= 4; i++) {
     const mqttSensorName = "Sensor" + i;
@@ -916,13 +903,7 @@ function parsePiezoPayload(payloadText, systemName){
 
     if (Array.isArray(data[mqttSensorName])) {
       pushChartBatch(dashboardSensorName, data[mqttSensorName]);
-      receivedAnySensor = true;
     }
-  }
-
-  if (!receivedAnySensor) {
-    logMqtt(`Piezo${systemName} message received, but no Sensor1-Sensor4 arrays found`);
-    return;
   }
 
   lastMqttMessageTime = Date.now();
@@ -957,8 +938,6 @@ function parseEnvPayload(payloadText){
   updateEnvironmentDisplay();
 
   lastMqttMessageTime = Date.now();
-  lastEnvMessageTime = Date.now();
-
   updateLastMqttTime();
 
   logMqtt(
@@ -983,40 +962,40 @@ function setGauge(gaugeId, valueId, value, min, max, decimals){
 }
 
 function updateEnvironmentDisplay(){
-  setGauge("tempGauge", "tempValue", latestEnvironment.temperature, -10, 50, 1);
-  setGauge("humGauge", "humValue", latestEnvironment.humidity, 0, 100, 0);
+  setGauge(
+    "tempGauge",
+    "tempValue",
+    latestEnvironment.temperature,
+    -10,
+    50,
+    1
+  );
+
+  setGauge(
+    "humGauge",
+    "humValue",
+    latestEnvironment.humidity,
+    0,
+    100,
+    0
+  );
 }
 
-function generateRandomSensorFallbackData(){
+function generateRandomFallbackData(){
   tick++;
 
-  const batchSize = 10;
   const now = Date.now();
 
   allSensors.forEach((id, idx) => {
-    const samples = [];
+    const pulse =
+      Math.exp(-Math.pow(((tick % 90) - 45 - idx * 2) / 10, 2)) * (20 + idx * 9);
 
-    for (let i = 0; i < batchSize; i++) {
-      const localTick = tick * batchSize + i;
-      const pulse =
-        Math.exp(-Math.pow(((localTick % 900) - 450 - idx * 20) / 80, 2)) * (20 + idx * 7);
+    const noise =
+      Math.sin((tick + idx * 12) / 5) * 3 + (Math.random() - 0.5) * 2;
 
-      const noise =
-        Math.sin((localTick + idx * 12) / 8) * 3 + (Math.random() - 0.5) * 2;
-
-      samples.push({
-        v: pulse + noise,
-        ts: now - (batchSize - 1 - i) * SAMPLE_INTERVAL_MS
-      });
-    }
-
-    pushChartBatch(id, samples);
+    pushChartValue(id, pulse + noise, now);
   });
 
-  updateFeatures();
-}
-
-function generateRandomEnvironmentFallbackData(){
   latestEnvironment.temperature =
     22 + Math.sin(tick / 80) * 1.5 + (Math.random() - 0.5) * 0.25;
 
@@ -1024,6 +1003,7 @@ function generateRandomEnvironmentFallbackData(){
     31 + Math.sin(tick / 100) * 4 + (Math.random() - 0.5) * 0.5;
 
   updateEnvironmentDisplay();
+  updateFeatures();
 }
 
 function updateFeatures(){
@@ -1223,24 +1203,15 @@ function connectMqtt(){
 
 function mainLoop(){
   const now = Date.now();
+  const mqttDataIsFresh = mqttConnected && now - lastMqttMessageTime < 3000;
 
-  const piezoDataIsFresh =
-    mqttConnected && now - lastPiezoMessageTime < 3000;
-
-  const envDataIsFresh =
-    mqttConnected && now - lastEnvMessageTime < 5000;
-
-  if (!piezoDataIsFresh) {
-    generateRandomSensorFallbackData();
-  }
-
-  if (!envDataIsFresh) {
-    generateRandomEnvironmentFallbackData();
+  if (!mqttDataIsFresh) {
+    generateRandomFallbackData();
   }
 
   updateStatusBadges();
 
-  if (piezoDataIsFresh) {
+  if (now - lastPiezoMessageTime > 500 && mqttDataIsFresh) {
     updateFeatures();
   }
 }
@@ -1269,6 +1240,7 @@ function addTraining(label){
   }
 
   counts[label]++;
+
   s.className = "status on";
   s.textContent = "Added 1 " + label + " event.";
 
@@ -1361,7 +1333,6 @@ function trainKnnModel(){
   );
 }
 
-createAllPlots();
 renderProgress();
 renderEvents();
 updateEnvironmentDisplay();
