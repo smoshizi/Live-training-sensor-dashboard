@@ -493,14 +493,6 @@
   </section>
 </div>
 <script>
-const sensorState = {};
-  allSensors.forEach(id => {
-    sensorState[id] = {
-      active: false,
-      litUntil: 0,
-      peakIndex: -1
-    };
-  });
 const MQTT_CONFIG = {
   enabled: true,
   brokerUrl: "wss://broker.hivemq.com:8884/mqtt",
@@ -677,49 +669,6 @@ function setSensorActive(sensorId, value){
   if (!sensor) return;
   if (!charts[sensorId]) return;
 
-  const now = Date.now();
-  const state = sensorState[sensorId];
-
-  // If currently lit, check if 3 seconds have passed
-  if (state.active) {
-    if (now < state.litUntil) {
-      // Still within 3 second window, keep lit and do nothing else
-      return;
-    } else {
-      // 3 seconds expired — turn off and remove the detected peak from the data
-      state.active = false;
-      sensor.classList.remove("active");
-
-      const chart = charts[sensorId];
-      const arr = chart.data.datasets[0].data;
-
-      // Replace the peak and its immediate neighbours with the local average
-      // to prevent the same event from re-triggering
-      if (state.peakIndex >= 0 && state.peakIndex < arr.length) {
-        const windowSize = 20; // samples either side to blank out
-        const start = Math.max(0, state.peakIndex - windowSize);
-        const end = Math.min(arr.length - 1, state.peakIndex + windowSize);
-
-        // Calculate average of samples outside the blanked region
-        const outsideSamples = arr
-          .filter((_, i) => i < start || i > end)
-          .map(Number)
-          .filter(v => Number.isFinite(v));
-
-        const fillValue = outsideSamples.length > 0
-          ? outsideSamples.reduce((sum, v) => sum + v, 0) / outsideSamples.length
-          : 0;
-
-        for (let i = start; i <= end; i++) {
-          arr[i] = fillValue;
-        }
-        chart.update("none");
-      }
-      state.peakIndex = -1;
-    }
-  }
-
-  // Sensor is not currently active — evaluate the window for a new peak
   const data = charts[sensorId].data.datasets[0].data
     .map(Number)
     .filter(v => Number.isFinite(v));
@@ -729,26 +678,25 @@ function setSensorActive(sensorId, value){
   const absData = data.map(v => Math.abs(v));
   const absPeak = Math.max(...absData);
   const absAvg = absData.reduce((sum, v) => sum + v, 0) / absData.length;
-  
+
+  // Standard deviation of absolute values to measure noise floor
   const variance = absData.reduce((sum, v) => sum + Math.pow(v - absAvg, 2), 0) / absData.length;
   const stdDev = Math.sqrt(variance);
+
+  // Noise floor is the average plus one standard deviation
   const noiseFloor = absAvg + stdDev;
 
+  // Minimum absolute threshold to ignore truly flat/near-zero signals
   const MIN_THRESHOLD = 3;
 
+  // Light up only if peak is meaningfully above the noise floor
   if (absPeak > MIN_THRESHOLD && absPeak > 3 * noiseFloor) {
-    // Record which index the peak is at so we can blank it later
-    const peakIndex = absData.indexOf(absPeak);
-
-    state.active = true;
-    state.litUntil = now + 3000;
-    state.peakIndex = peakIndex;
-
     sensor.classList.add("active");
   } else {
     sensor.classList.remove("active");
   }
 }
+
 function updateDynamicYAxis(chart){
   const values = chart.data.datasets[0].data
     .map(Number)
