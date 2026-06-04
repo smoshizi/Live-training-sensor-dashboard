@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Live Training Sensor Dashboard</title>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
 <style>
@@ -584,13 +584,10 @@
 <script>
 const MQTT_CONFIG = {
   enabled: true,
-
   brokerUrl: "wss://broker.hivemq.com:8884/mqtt",
-
   topicPiezoA: "iot/piezoA",
   topicPiezoB: "iot/piezoB",
   topicEnv: "iot/tempB",
-
   options: {
     clientId: "live_training_dashboard_" + Math.random().toString(16).slice(2),
     clean: true,
@@ -622,11 +619,9 @@ const latestEnvironment = {
 
 let mqttClient = null;
 let mqttConnected = false;
-
 let lastMqttMessageTime = 0;
 let lastPiezoMessageTime = 0;
 let lastEnvMessageTime = 0;
-
 let tick = 0;
 let eventHistoryBuffer = [];
 
@@ -653,7 +648,6 @@ let events = [];
 function showTab(id, btn){
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
-
   document.getElementById(id).classList.add("active");
   btn.classList.add("active");
 }
@@ -664,13 +658,11 @@ function formatTimeLabel(ms){
   const m = String(d.getMinutes()).padStart(2, "0");
   const s = String(d.getSeconds()).padStart(2, "0");
   const tenth = Math.floor(d.getMilliseconds() / 100);
-
   return `${h}:${m}:${s}.${tenth}`;
 }
 
 function makeInitialTimeLabels(){
   const now = Date.now();
-
   return Array.from({ length: CHART_POINTS }, (_, i) => {
     const t = now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS;
     return formatTimeLabel(t);
@@ -684,9 +676,8 @@ function logMqtt(message){
   const time = new Date().toLocaleTimeString();
   log.textContent = `[${time}] ${message}\n` + log.textContent;
 
-  const maxLength = 5000;
-  if (log.textContent.length > maxLength) {
-    log.textContent = log.textContent.slice(0, maxLength);
+  if (log.textContent.length > 5000) {
+    log.textContent = log.textContent.slice(0, 5000);
   }
 }
 
@@ -698,8 +689,7 @@ function updateStatusBadges(){
   mqttBadge.style.background = mqttConnected ? "#e8f5e9" : "#fee2e2";
   mqttBadge.style.color = mqttConnected ? "#166534" : "#991b1b";
 
-  const piezoDataIsFresh =
-    mqttConnected && Date.now() - lastPiezoMessageTime < 3000;
+  const piezoDataIsFresh = mqttConnected && Date.now() - lastPiezoMessageTime < 3000;
 
   dataBadge.textContent = piezoDataIsFresh ? "Live Piezo Data" : "Random Sensor Fallback";
   dataBadge.style.background = piezoDataIsFresh ? "#dbeafe" : "#fff7ed";
@@ -731,9 +721,14 @@ function makePlot(id, parent){
 
   parent.appendChild(div);
 
-  const ctx = document.getElementById(`chart_${id}`);
+  const canvas = document.getElementById(`chart_${id}`);
 
-  charts[id] = new Chart(ctx, {
+  if (typeof Chart === "undefined") {
+    div.innerHTML += `<div style="color:#b91c1c">Chart.js failed to load.</div>`;
+    return;
+  }
+
+  charts[id] = new Chart(canvas, {
     type: "line",
     data: {
       labels: makeInitialTimeLabels(),
@@ -751,6 +746,7 @@ function makePlot(id, parent){
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
+      normalized: true,
       plugins: {
         legend: { display: false }
       },
@@ -783,8 +779,16 @@ function makePlot(id, parent){
   });
 }
 
-sensorIdsB.forEach(id => makePlot(id, document.getElementById("bPlots")));
-sensorIdsA.forEach(id => makePlot(id, document.getElementById("aPlots")));
+function createAllPlots(){
+  const bParent = document.getElementById("bPlots");
+  const aParent = document.getElementById("aPlots");
+
+  bParent.innerHTML = "";
+  aParent.innerHTML = "";
+
+  sensorIdsB.forEach(id => makePlot(id, bParent));
+  sensorIdsA.forEach(id => makePlot(id, aParent));
+}
 
 function setSensorActive(sensorId, value){
   const sensor = document.getElementById("map_" + sensorId);
@@ -823,12 +827,12 @@ function updateDynamicYAxis(chart){
 }
 
 function pushChartValue(sensorId, value, timestampMs = Date.now()){
-  if (!charts[sensorId]) return;
+  const chart = charts[sensorId];
+  if (!chart) return;
 
   const numericValue = Number(value) || 0;
   latestSensorValues[sensorId] = numericValue;
 
-  const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
   const labels = chart.data.labels;
 
@@ -850,9 +854,9 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
 }
 
 function pushChartBatch(sensorId, samples){
-  if (!charts[sensorId] || !Array.isArray(samples)) return;
-
   const chart = charts[sensorId];
+  if (!chart || !Array.isArray(samples)) return;
+
   const arr = chart.data.datasets[0].data;
   const labels = chart.data.labels;
 
@@ -979,38 +983,34 @@ function setGauge(gaugeId, valueId, value, min, max, decimals){
 }
 
 function updateEnvironmentDisplay(){
-  setGauge(
-    "tempGauge",
-    "tempValue",
-    latestEnvironment.temperature,
-    -10,
-    50,
-    1
-  );
-
-  setGauge(
-    "humGauge",
-    "humValue",
-    latestEnvironment.humidity,
-    0,
-    100,
-    0
-  );
+  setGauge("tempGauge", "tempValue", latestEnvironment.temperature, -10, 50, 1);
+  setGauge("humGauge", "humValue", latestEnvironment.humidity, 0, 100, 0);
 }
 
 function generateRandomSensorFallbackData(){
   tick++;
 
+  const batchSize = 10;
   const now = Date.now();
 
   allSensors.forEach((id, idx) => {
-    const pulse =
-      Math.exp(-Math.pow(((tick % 90) - 45 - idx * 2) / 10, 2)) * (20 + idx * 9);
+    const samples = [];
 
-    const noise =
-      Math.sin((tick + idx * 12) / 5) * 3 + (Math.random() - 0.5) * 2;
+    for (let i = 0; i < batchSize; i++) {
+      const localTick = tick * batchSize + i;
+      const pulse =
+        Math.exp(-Math.pow(((localTick % 900) - 450 - idx * 20) / 80, 2)) * (20 + idx * 7);
 
-    pushChartValue(id, pulse + noise, now);
+      const noise =
+        Math.sin((localTick + idx * 12) / 8) * 3 + (Math.random() - 0.5) * 2;
+
+      samples.push({
+        v: pulse + noise,
+        ts: now - (batchSize - 1 - i) * SAMPLE_INTERVAL_MS
+      });
+    }
+
+    pushChartBatch(id, samples);
   });
 
   updateFeatures();
@@ -1269,7 +1269,6 @@ function addTraining(label){
   }
 
   counts[label]++;
-
   s.className = "status on";
   s.textContent = "Added 1 " + label + " event.";
 
@@ -1362,6 +1361,7 @@ function trainKnnModel(){
   );
 }
 
+createAllPlots();
 renderProgress();
 renderEvents();
 updateEnvironmentDisplay();
