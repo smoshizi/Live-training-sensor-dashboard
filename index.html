@@ -675,10 +675,22 @@ function setSensorActive(sensorId, value){
 
   if (data.length === 0) return;
 
-  const avg = data.reduce((sum, v) => sum + Math.abs(v), 0) / data.length;
-  const peak = Math.max(...data.map(v => Math.abs(v)));
+  const absData = data.map(v => Math.abs(v));
+  const absPeak = Math.max(...absData);
+  const absAvg = absData.reduce((sum, v) => sum + v, 0) / absData.length;
 
-  if (peak > 2 * avg && avg > 0) {
+  // Standard deviation of absolute values to measure noise floor
+  const variance = absData.reduce((sum, v) => sum + Math.pow(v - absAvg, 2), 0) / absData.length;
+  const stdDev = Math.sqrt(variance);
+
+  // Noise floor is the average plus one standard deviation
+  const noiseFloor = absAvg + stdDev;
+
+  // Minimum absolute threshold to ignore truly flat/near-zero signals
+  const MIN_THRESHOLD = 3;
+
+  // Light up only if peak is meaningfully above the noise floor
+  if (absPeak > MIN_THRESHOLD && absPeak > 3 * noiseFloor) {
     sensor.classList.add("active");
   } else {
     sensor.classList.remove("active");
