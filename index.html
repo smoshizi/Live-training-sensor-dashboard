@@ -667,7 +667,18 @@ sensorIdsA.forEach(id => makePlot(id, document.getElementById("aPlots")));
 function setSensorActive(sensorId, value){
   const sensor = document.getElementById("map_" + sensorId);
   if (!sensor) return;
-  if (Math.abs(value) > 5) {
+  if (!charts[sensorId]) return;
+
+  const data = charts[sensorId].data.datasets[0].data
+    .map(Number)
+    .filter(v => Number.isFinite(v));
+
+  if (data.length === 0) return;
+
+  const avg = data.reduce((sum, v) => sum + Math.abs(v), 0) / data.length;
+  const peak = Math.max(...data.map(v => Math.abs(v)));
+
+  if (peak > 2 * avg && avg > 0) {
     sensor.classList.add("active");
   } else {
     sensor.classList.remove("active");
