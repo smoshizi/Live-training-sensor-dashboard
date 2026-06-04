@@ -736,7 +736,7 @@ function makePlot(id, parent){
       labels: makeInitialTimeLabels(),
       datasets: [{
         label: id,
-        data: Array(CHART_POINTS).fill(0),
+        data: Array(CHART_POINTS).fill(null),
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.15,
@@ -766,6 +766,7 @@ function makePlot(id, parent){
         },
         y: {
           display: true,
+          beginAtZero: false,
           ticks: {
             maxTicksLimit: 5
           },
@@ -809,6 +810,7 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
   arr.push(numericValue);
   labels.push(formatTimeLabel(timestampMs));
 
+  updateDynamicYAxis(chart);
   chart.update("none");
 
   const valueText = document.getElementById("value_" + sensorId);
@@ -821,21 +823,24 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
 
 function updateDynamicYAxis(chart){
   const values = chart.data.datasets[0].data
-    .map(Number)
+    .map(v => Number(v))
     .filter(v => Number.isFinite(v));
 
-  if (values.length === 0) return;
+  if (values.length === 0) {
+    chart.options.scales.y.min = -1;
+    chart.options.scales.y.max = 1;
+    return;
+  }
 
   let min = Math.min(...values);
   let max = Math.max(...values);
 
-  // Avoid a flat 0–1 axis when data is constant or nearly constant.
-  if (Math.abs(max - min) < 0.5) {
+  if (Math.abs(max - min) < 0.01) {
     min -= 1;
     max += 1;
   }
 
-  const padding = (max - min) * 0.15;
+  const padding = Math.max((max - min) * 0.15, 0.5);
 
   chart.options.scales.y.min = min - padding;
   chart.options.scales.y.max = max + padding;
