@@ -4,10 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Live Training Sensor Dashboard</title>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-
 <style>
   body{
     margin:0;
@@ -15,7 +13,6 @@
     background:#f3f6fb;
     color:#1f2937;
   }
-
   header{
     background:white;
     padding:18px 26px;
@@ -25,12 +22,10 @@
     align-items:center;
     gap:16px;
   }
-
   h1{
     margin:0;
     font-size:24px;
   }
-
   .badges span{
     background:#e8f5e9;
     color:#166534;
@@ -40,51 +35,43 @@
     font-size:13px;
     display:inline-block;
   }
-
   .container{
     padding:20px;
     max-width:1450px;
     margin:auto;
   }
-
   .metrics{
     display:grid;
     grid-template-columns:repeat(6,1fr);
     gap:14px;
     margin-bottom:18px;
   }
-
   .card{
     background:white;
     border-radius:18px;
     padding:16px;
     box-shadow:0 2px 10px rgba(0,0,0,.06);
   }
-
   .metric-title{
     font-size:13px;
     color:#6b7280;
   }
-
   .metric-value{
     font-size:22px;
     font-weight:700;
     margin-top:6px;
   }
-
   .metric-sub{
     font-size:12px;
     color:#9ca3af;
     margin-top:4px;
   }
-
   .tabs{
     display:flex;
     gap:8px;
     margin-bottom:16px;
     flex-wrap:wrap;
   }
-
   .tabs button{
     border:0;
     background:white;
@@ -93,32 +80,26 @@
     font-weight:600;
     cursor:pointer;
   }
-
   .tabs button.active{
     background:#111827;
     color:white;
   }
-
   .tab{
     display:none;
   }
-
   .tab.active{
     display:block;
   }
-
   .main-grid{
     display:grid;
     grid-template-columns:2fr 1fr;
     gap:16px;
   }
-
   .plots-grid{
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:18px;
   }
-
   .side-title{
     text-align:center;
     background:#eef2f7;
@@ -127,7 +108,6 @@
     font-weight:700;
     margin-bottom:10px;
   }
-
   .plot-card{
     background:white;
     border-radius:14px;
@@ -135,7 +115,6 @@
     margin-bottom:10px;
     border:1px solid #e5e7eb;
   }
-
   .plot-title{
     font-weight:700;
     margin-bottom:5px;
@@ -143,18 +122,15 @@
     justify-content:space-between;
     align-items:center;
   }
-
   .latest-value{
     color:#64748b;
     font-size:12px;
     font-weight:500;
   }
-
   canvas{
     width:100%!important;
     height:145px!important;
   }
-
   .slab{
     height:420px;
     border:3px solid #cbd5e1;
@@ -162,7 +138,6 @@
     border-radius:18px;
     position:relative;
   }
-
   .sensor{
     position:absolute;
     width:42px;
@@ -176,14 +151,12 @@
     font-weight:700;
     transform:translate(-50%,-50%);
   }
-
   .sensor.active{
     background:#dcfce7;
     border-color:#16a34a;
     color:#166534;
     box-shadow:0 0 0 5px rgba(34,197,94,.18);
   }
-
   .arrow{
     position:absolute;
     left:50%;
@@ -191,14 +164,12 @@
     height:310px;
     border-left:3px dashed #64748b;
   }
-
   .training-buttons{
     display:grid;
     grid-template-columns:repeat(3,1fr);
     gap:12px;
     margin:16px 0;
   }
-
   .training-buttons button,
   .control-btn{
     border:0;
@@ -210,12 +181,10 @@
     font-weight:700;
     cursor:pointer;
   }
-
   .control-btn.secondary{
     background:#e5e7eb;
     color:#111827;
   }
-
   .status{
     padding:12px 16px;
     border-radius:14px;
@@ -223,28 +192,23 @@
     color:#9a3412;
     margin-bottom:14px;
   }
-
   .status.on{
     background:#ecfdf5;
     color:#047857;
   }
-
   .progress-row{
     margin:14px 0;
   }
-
   .bar{
     height:12px;
     background:#e5e7eb;
     border-radius:8px;
     overflow:hidden;
   }
-
   .fill{
     height:100%;
     background:#111827;
   }
-
   .event{
     display:flex;
     justify-content:space-between;
@@ -256,23 +220,19 @@
     border:1px solid #e5e7eb;
     cursor:pointer;
   }
-
   .event.selected{
     outline:3px solid #111827;
   }
-
   .features{
     display:grid;
     grid-template-columns:repeat(2,1fr);
     gap:10px;
   }
-
   .feature{
     background:#f8fafc;
     padding:12px;
     border-radius:12px;
   }
-
   .gauge{
     height:90px;
     display:flex;
@@ -281,7 +241,6 @@
     font-size:28px;
     font-weight:800;
   }
-
   .gauge-ring{
     width:90px;
     height:90px;
@@ -290,7 +249,6 @@
     background:conic-gradient(#111827 0%, #e5e7eb 0%);
     position:relative;
   }
-
   .gauge-ring::before{
     content:"";
     position:absolute;
@@ -299,24 +257,20 @@
     border-radius:50%;
     background:white;
   }
-
   .gauge-inner{
     position:relative;
     z-index:1;
     text-align:center;
     line-height:1;
   }
-
   .gauge-inner div{
     font-size:22px;
     font-weight:800;
   }
-
   .gauge-inner small{
     font-size:12px;
     color:#64748b;
   }
-
   .mqtt-log{
     font-family:Consolas,monospace;
     background:#0f172a;
@@ -328,29 +282,24 @@
     font-size:12px;
     white-space:pre-wrap;
   }
-
   @media(max-width:1000px){
     header{
       flex-direction:column;
       align-items:flex-start;
     }
-
     .metrics{
       grid-template-columns:repeat(2,1fr);
     }
-
     .main-grid,
     .plots-grid{
       grid-template-columns:1fr;
     }
-
     .training-buttons{
       grid-template-columns:1fr;
     }
   }
 </style>
 </head>
-
 <body>
 <header>
   <div>
@@ -359,14 +308,12 @@
       Live MQTT monitoring, training, and classification
     </div>
   </div>
-
   <div class="badges">
     <span id="mqttBadge">MQTT Connecting</span>
     <span id="dataBadge">Random Fallback</span>
     <span>KNN Ready</span>
   </div>
 </header>
-
 <div class="container">
   <div class="metrics">
     <div class="card">
@@ -374,25 +321,21 @@
       <div class="metric-value">100 Hz</div>
       <div class="metric-sub">10 ms/sample from payload</div>
     </div>
-
     <div class="card">
       <div class="metric-title">MQTT Topics</div>
       <div class="metric-value" style="font-size:13px">iot/piezoA<br>iot/piezoB<br>iot/tempB</div>
       <div class="metric-sub">live message input</div>
     </div>
-
     <div class="card">
       <div class="metric-title">Last MQTT Message</div>
       <div class="metric-value" id="lastMqttTime" style="font-size:16px">None yet</div>
       <div class="metric-sub">falls back after 3 seconds</div>
     </div>
-
     <div class="card">
       <div class="metric-title">Last Class</div>
       <div class="metric-value" id="lastClass">Waiting</div>
       <div class="metric-sub" id="lastClassSub">confidence --</div>
     </div>
-
     <div class="card">
       <div class="metric-title">Temperature</div>
       <div class="gauge gauge-ring" id="tempGauge">
@@ -403,7 +346,6 @@
       </div>
       <div class="metric-sub">from iot/tempB</div>
     </div>
-
     <div class="card">
       <div class="metric-title">Humidity</div>
       <div class="gauge gauge-ring" id="humGauge">
@@ -415,7 +357,6 @@
       <div class="metric-sub">from iot/tempB</div>
     </div>
   </div>
-
   <div class="tabs">
     <button class="active" onclick="showTab('live',this)">Live Plots</button>
     <button onclick="showTab('training',this)">Training</button>
@@ -423,35 +364,28 @@
     <button onclick="showTab('classify',this)">Classify</button>
     <button onclick="showTab('mqtt',this)">MQTT Status</button>
   </div>
-
   <section id="live" class="tab active">
     <div class="main-grid">
       <div class="card">
         <h2>Live Sensor Plots — 20 s Window</h2>
-
         <div class="plots-grid">
           <div>
             <div class="side-title">System B — Left Side</div>
             <div id="bPlots"></div>
           </div>
-
           <div>
             <div class="side-title">System A — Right Side</div>
             <div id="aPlots"></div>
           </div>
         </div>
       </div>
-
       <div class="card">
         <h2>Concrete Slab Sensor Map</h2>
-
         <div class="slab">
           <div style="position:absolute;left:20px;top:15px;color:#64748b;font-size:13px">
             Vehicle direction: top → bottom
           </div>
-
           <div class="arrow"></div>
-
           <div id="map_B1" class="sensor" style="left:50%;top:12%">B1</div>
           <div id="map_A1" class="sensor" style="left:90%;top:12%">A1</div>
           <div id="map_A2" class="sensor" style="left:90%;top:35%">A2</div>
@@ -464,62 +398,48 @@
       </div>
     </div>
   </section>
-
   <section id="training" class="tab">
     <div class="main-grid">
       <div class="card">
         <h2>Training Mode — Label Detected Events</h2>
-
         <div id="trainStatus" class="status">
           Training paused. Click Start Training first.
         </div>
-
         <div class="features">
           <div class="feature"><b>Active sensors</b><br><span id="activeSensors">0 / 8</span></div>
           <div class="feature"><b>Total energy</b><br><span id="totalEnergy">0</span></div>
           <div class="feature"><b>Duration</b><br><span id="eventDuration">-- s</span></div>
           <div class="feature"><b>Top→bottom score</b><br><span id="directionScore">--</span></div>
         </div>
-
         <div class="training-buttons">
           <button onclick="addTraining('Pedestrian')">🚶 Pedestrian (P)</button>
           <button onclick="addTraining('Light car')">🚗 Light Car (L)</button>
           <button onclick="addTraining('Heavy car')">🚛 Heavy Car (H)</button>
         </div>
-
         <div id="progressArea"></div>
       </div>
-
       <div class="card">
         <h2>Controls</h2>
-
         <button class="control-btn" onclick="toggleTraining()" id="startBtn">
           Start Training
         </button>
-
         <br><br>
-
         <button class="control-btn secondary" onclick="trainKnnModel()">
           Train KNN Model
         </button>
-
         <br><br>
-
         <button class="control-btn secondary" onclick="clearSelectedEvent()">
           Clear Selected Event
         </button>
-
         <p style="color:#6b7280">
           Target: 30 labelled events per class. Press P/L/H only after the dashboard detects a complete event.
         </p>
       </div>
     </div>
   </section>
-
   <section id="review" class="tab">
     <div class="card">
       <h2>Features Used by Classifier</h2>
-
       <div class="features">
         <div class="feature">Peak amplitude per sensor</div>
         <div class="feature">Event duration</div>
@@ -533,46 +453,38 @@
       </div>
     </div>
   </section>
-
   <section id="classify" class="tab">
     <div class="main-grid">
       <div class="card">
         <h2>Real-Time Classification Feed</h2>
         <div id="eventFeed"></div>
       </div>
-
       <div class="card">
         <h2>Current Event</h2>
-
         <div style="text-align:center;font-size:58px" id="currentIcon">⏳</div>
         <h2 style="text-align:center" id="currentLabel">Waiting for event</h2>
         <p style="text-align:center;color:#6b7280" id="currentConfidence">confidence --</p>
-
         <div class="feature">Energy balance: <span id="energyBalance">--</span></div><br>
         <div class="feature">Top→bottom score: <span id="classDirectionScore">--</span></div><br>
         <div class="feature">Active sensors: <span id="classActiveSensors">0</span></div>
       </div>
     </div>
   </section>
-
   <section id="mqtt" class="tab">
     <div class="main-grid">
       <div class="card">
         <h2>MQTT Connection</h2>
-
         <div class="features">
           <div class="feature"><b>Broker</b><br><span id="brokerText"></span></div>
           <div class="feature"><b>Piezo A Topic</b><br><span>iot/piezoA</span></div>
           <div class="feature"><b>Piezo B Topic</b><br><span>iot/piezoB</span></div>
           <div class="feature"><b>Environment Topic</b><br><span>iot/tempB</span></div>
         </div>
-
         <p style="color:#6b7280">
           GitHub Pages requires MQTT over WebSocket. This dashboard uses HiveMQ WebSocket:
           <b>wss://broker.hivemq.com:8884/mqtt</b>
         </p>
       </div>
-
       <div class="card">
         <h2>MQTT Log</h2>
         <div id="mqttLog" class="mqtt-log"></div>
@@ -580,17 +492,13 @@
     </div>
   </section>
 </div>
-
 <script>
 const MQTT_CONFIG = {
   enabled: true,
-
   brokerUrl: "wss://broker.hivemq.com:8884/mqtt",
-
   topicPiezoA: "iot/piezoA",
   topicPiezoB: "iot/piezoB",
   topicEnv: "iot/tempB",
-
   options: {
     clientId: "live_training_dashboard_" + Math.random().toString(16).slice(2),
     clean: true,
@@ -598,36 +506,28 @@ const MQTT_CONFIG = {
     connectTimeout: 8000
   }
 };
-
 const SAMPLE_RATE_HZ = 100;
 const WINDOW_SECONDS = 20;
 const CHART_POINTS = SAMPLE_RATE_HZ * WINDOW_SECONDS;
 const SAMPLE_INTERVAL_MS = 1000 / SAMPLE_RATE_HZ;
-
 const sensorIdsA = ["A1", "A2", "A3", "A4"];
 const sensorIdsB = ["B1", "B2", "B3", "B4"];
 const allSensors = [...sensorIdsB, ...sensorIdsA];
-
 const charts = {};
-
 const latestSensorValues = {
   A1: 0, A2: 0, A3: 0, A4: 0,
   B1: 0, B2: 0, B3: 0, B4: 0
 };
-
 const latestEnvironment = {
   temperature: 22,
   humidity: 31
 };
-
 let mqttClient = null;
 let mqttConnected = false;
 let lastMqttMessageTime = 0;
 let lastPiezoMessageTime = 0;
 let tick = 0;
-
 let eventHistoryBuffer = [];
-
 let currentFeatures = {
   activeSensors: 0,
   totalEnergy: 0,
@@ -635,15 +535,12 @@ let currentFeatures = {
   directionScore: 0,
   energyBalance: 0
 };
-
 let trainingActive = false;
-
 let counts = {
   "Pedestrian": 0,
   "Light car": 0,
   "Heavy car": 0
 };
-
 let target = 30;
 let selectedEvent = null;
 let events = [];
@@ -651,7 +548,6 @@ let events = [];
 function showTab(id, btn){
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
-
   document.getElementById(id).classList.add("active");
   btn.classList.add("active");
 }
@@ -662,13 +558,11 @@ function formatTimeLabel(ms){
   const m = String(d.getMinutes()).padStart(2, "0");
   const s = String(d.getSeconds()).padStart(2, "0");
   const tenth = Math.floor(d.getMilliseconds() / 100);
-
   return `${h}:${m}:${s}.${tenth}`;
 }
 
 function makeInitialTimeLabels(){
   const now = Date.now();
-
   return Array.from({ length: CHART_POINTS }, (_, i) => {
     const t = now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS;
     return formatTimeLabel(t);
@@ -678,10 +572,8 @@ function makeInitialTimeLabels(){
 function logMqtt(message){
   const log = document.getElementById("mqttLog");
   if (!log) return;
-
   const time = new Date().toLocaleTimeString();
   log.textContent = `[${time}] ${message}\n` + log.textContent;
-
   const maxLength = 5000;
   if (log.textContent.length > maxLength) {
     log.textContent = log.textContent.slice(0, maxLength);
@@ -691,13 +583,10 @@ function logMqtt(message){
 function updateStatusBadges(){
   const mqttBadge = document.getElementById("mqttBadge");
   const dataBadge = document.getElementById("dataBadge");
-
   mqttBadge.textContent = mqttConnected ? "MQTT Online" : "MQTT Offline";
   mqttBadge.style.background = mqttConnected ? "#e8f5e9" : "#fee2e2";
   mqttBadge.style.color = mqttConnected ? "#166534" : "#991b1b";
-
   const mqttDataIsFresh = mqttConnected && Date.now() - lastMqttMessageTime < 3000;
-
   dataBadge.textContent = mqttDataIsFresh ? "Live MQTT Data" : "Random Fallback";
   dataBadge.style.background = mqttDataIsFresh ? "#dbeafe" : "#fff7ed";
   dataBadge.style.color = mqttDataIsFresh ? "#1d4ed8" : "#9a3412";
@@ -705,19 +594,16 @@ function updateStatusBadges(){
 
 function updateLastMqttTime(){
   const el = document.getElementById("lastMqttTime");
-
   if (!lastMqttMessageTime) {
     el.textContent = "None yet";
     return;
   }
-
   el.textContent = new Date(lastMqttMessageTime).toLocaleTimeString();
 }
 
 function makePlot(id, parent){
   const div = document.createElement("div");
   div.className = "plot-card";
-
   div.innerHTML = `
     <div class="plot-title">
       <span>${id}</span>
@@ -725,11 +611,8 @@ function makePlot(id, parent){
     </div>
     <canvas id="chart_${id}"></canvas>
   `;
-
   parent.appendChild(div);
-
   const ctx = document.getElementById(`chart_${id}`);
-
   charts[id] = new Chart(ctx, {
     type: "line",
     data: {
@@ -747,7 +630,6 @@ function makePlot(id, parent){
       animation: false,
       responsive: true,
       maintainAspectRatio: false,
-      parsing: false,
       plugins: {
         legend: { display: false }
       },
@@ -785,7 +667,6 @@ sensorIdsA.forEach(id => makePlot(id, document.getElementById("aPlots")));
 function setSensorActive(sensorId, value){
   const sensor = document.getElementById("map_" + sensorId);
   if (!sensor) return;
-
   if (Math.abs(value) > 5) {
     sensor.classList.add("active");
   } else {
@@ -793,101 +674,76 @@ function setSensorActive(sensorId, value){
   }
 }
 
-function pushChartValue(sensorId, value, timestampMs = Date.now()){
-  if (!charts[sensorId]) return;
-
-  const numericValue = Number(value) || 0;
-  latestSensorValues[sensorId] = numericValue;
-
-  const chart = charts[sensorId];
-  const arr = chart.data.datasets[0].data;
-  const labels = chart.data.labels;
-
-  arr.shift();
-  labels.shift();
-
-  arr.push({ x: formatTimeLabel(timestampMs), y: numericValue });
-  labels.push(formatTimeLabel(timestampMs));
-
-  chart.update("none");
-
-  const valueText = document.getElementById("value_" + sensorId);
-  if (valueText) {
-    valueText.textContent = numericValue.toFixed(2);
-  }
-
-  setSensorActive(sensorId, numericValue);
-}
-
-function updateDynamicYAxis(chart) {
+function updateDynamicYAxis(chart){
   const values = chart.data.datasets[0].data
     .map(Number)
     .filter(v => Number.isFinite(v));
   if (values.length === 0) return;
-
   let min = Math.min(...values);
   let max = Math.max(...values);
-
   if (Math.abs(max - min) < 0.5) {
     min -= 1;
     max += 1;
   }
-
   const padding = (max - min) * 0.15;
   chart.options.scales.y.min = min - padding;
   chart.options.scales.y.max = max + padding;
-  // ← no separate update() call needed, caller handles it
 }
-  
-function pushChartBatch(sensorId, samples){
-  if (!charts[sensorId] || !Array.isArray(samples)) return;
 
+function pushChartValue(sensorId, value, timestampMs = Date.now()){
+  if (!charts[sensorId]) return;
+  const numericValue = Number(value) || 0;
+  latestSensorValues[sensorId] = numericValue;
   const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
   const labels = chart.data.labels;
+  arr.shift();
+  labels.shift();
+  arr.push(numericValue);
+  labels.push(formatTimeLabel(timestampMs));
+  updateDynamicYAxis(chart);
+  chart.update("none");
+  const valueText = document.getElementById("value_" + sensorId);
+  if (valueText) {
+    valueText.textContent = numericValue.toFixed(2);
+  }
+  setSensorActive(sensorId, numericValue);
+}
 
+function pushChartBatch(sensorId, samples){
+  if (!charts[sensorId] || !Array.isArray(samples)) return;
+  const chart = charts[sensorId];
+  const arr = chart.data.datasets[0].data;
+  const labels = chart.data.labels;
   const batchStartTime = Date.now() - (samples.length - 1) * SAMPLE_INTERVAL_MS;
-
   samples.forEach((sample, index) => {
     const numericValue = Number(sample.v) || 0;
     const liveTimestamp = batchStartTime + index * SAMPLE_INTERVAL_MS;
-
     arr.shift();
     labels.shift();
-
-    arr.push({ x: formatTimeLabel(liveTimestamp), y: numericValue });
+    arr.push(numericValue);
     labels.push(formatTimeLabel(liveTimestamp));
-
     latestSensorValues[sensorId] = numericValue;
-
     eventHistoryBuffer.push({
       sensorId,
       value: numericValue,
       ts: liveTimestamp,
       deviceTs: Number(sample.ts) || null
-
-      updateDynamicYAxis(chart);   // ← set min/max first
-      chart.update("none");        // ← then render once
     });
   });
-
   updateDynamicYAxis(chart);
   chart.update("none");
-
   const lastSample = samples[samples.length - 1];
   const lastValue = lastSample ? Number(lastSample.v) || 0 : 0;
-
   const valueText = document.getElementById("value_" + sensorId);
   if (valueText) {
     valueText.textContent = lastValue.toFixed(2);
   }
-
   setSensorActive(sensorId, lastValue);
 }
 
 function parsePiezoPayload(payloadText, systemName){
   let data;
-
   try {
     data = JSON.parse(payloadText);
   } catch (error) {
@@ -895,31 +751,24 @@ function parsePiezoPayload(payloadText, systemName){
     logMqtt("Invalid piezo JSON received");
     return;
   }
-
   const prefix = systemName === "A" ? "A" : "B";
-
   for (let i = 1; i <= 4; i++) {
     const mqttSensorName = "Sensor" + i;
     const dashboardSensorName = prefix + i;
-
     if (Array.isArray(data[mqttSensorName])) {
       pushChartBatch(dashboardSensorName, data[mqttSensorName]);
     }
   }
-
   lastMqttMessageTime = Date.now();
   lastPiezoMessageTime = Date.now();
-
   updateLastMqttTime();
   updateFeatures();
   maybeClassifyEvent();
-
   logMqtt(`Received Piezo${systemName} batch`);
 }
 
 function parseEnvPayload(payloadText){
   let data;
-
   try {
     data = JSON.parse(payloadText);
   } catch (error) {
@@ -927,20 +776,15 @@ function parseEnvPayload(payloadText){
     logMqtt("Invalid environmental JSON received");
     return;
   }
-
   if (data.Temperature !== undefined) {
     latestEnvironment.temperature = Number(data.Temperature);
   }
-
   if (data.Humidity !== undefined) {
     latestEnvironment.humidity = Number(data.Humidity);
   }
-
   updateEnvironmentDisplay();
-
   lastMqttMessageTime = Date.now();
   updateLastMqttTime();
-
   logMqtt(
     `Received environment: T=${latestEnvironment.temperature.toFixed(2)}°C, H=${latestEnvironment.humidity.toFixed(2)}%`
   );
@@ -949,60 +793,34 @@ function parseEnvPayload(payloadText){
 function setGauge(gaugeId, valueId, value, min, max, decimals){
   const gauge = document.getElementById(gaugeId);
   const valueText = document.getElementById(valueId);
-
   if (!gauge || !valueText) return;
-
   const numericValue = Number(value) || 0;
   const clamped = Math.max(min, Math.min(max, numericValue));
   const percent = ((clamped - min) / (max - min)) * 100;
-
   gauge.style.background =
     `conic-gradient(#111827 ${percent}%, #e5e7eb ${percent}% 100%)`;
-
   valueText.textContent = numericValue.toFixed(decimals);
 }
 
 function updateEnvironmentDisplay(){
-  setGauge(
-    "tempGauge",
-    "tempValue",
-    latestEnvironment.temperature,
-    -10,
-    50,
-    1
-  );
-
-  setGauge(
-    "humGauge",
-    "humValue",
-    latestEnvironment.humidity,
-    0,
-    100,
-    0
-  );
+  setGauge("tempGauge", "tempValue", latestEnvironment.temperature, -10, 50, 1);
+  setGauge("humGauge", "humValue", latestEnvironment.humidity, 0, 100, 0);
 }
 
 function generateRandomFallbackData(){
   tick++;
-
   const now = Date.now();
-
   allSensors.forEach((id, idx) => {
     const pulse =
       Math.exp(-Math.pow(((tick % 90) - 45 - idx * 2) / 10, 2)) * (20 + idx * 9);
-
     const noise =
       Math.sin((tick + idx * 12) / 5) * 3 + (Math.random() - 0.5) * 2;
-
     pushChartValue(id, pulse + noise, now);
   });
-
   latestEnvironment.temperature =
     22 + Math.sin(tick / 80) * 1.5 + (Math.random() - 0.5) * 0.25;
-
   latestEnvironment.humidity =
     31 + Math.sin(tick / 100) * 4 + (Math.random() - 0.5) * 0.5;
-
   updateEnvironmentDisplay();
   updateFeatures();
 }
@@ -1010,47 +828,38 @@ function generateRandomFallbackData(){
 function updateFeatures(){
   const recentWindowMs = 1200;
   const nowTs = Date.now();
-
   eventHistoryBuffer = eventHistoryBuffer.filter(item => {
     return nowTs - item.ts < recentWindowMs;
   });
-
   const absValues = Object.values(latestSensorValues).map(v => Math.abs(v));
   const activeSensors = absValues.filter(v => v > 5).length;
   const totalEnergy = absValues.reduce((sum, v) => sum + v, 0);
-
   const topEnergy =
     Math.abs(latestSensorValues.A1) +
     Math.abs(latestSensorValues.B1) +
     Math.abs(latestSensorValues.A2);
-
   const bottomEnergy =
     Math.abs(latestSensorValues.A4) +
     Math.abs(latestSensorValues.B3) +
     Math.abs(latestSensorValues.A3);
-
   const directionScore =
     (bottomEnergy + topEnergy) > 0
       ? bottomEnergy / (bottomEnergy + topEnergy)
       : 0;
-
   const energyA =
     Math.abs(latestSensorValues.A1) +
     Math.abs(latestSensorValues.A2) +
     Math.abs(latestSensorValues.A3) +
     Math.abs(latestSensorValues.A4);
-
   const energyB =
     Math.abs(latestSensorValues.B1) +
     Math.abs(latestSensorValues.B2) +
     Math.abs(latestSensorValues.B3) +
     Math.abs(latestSensorValues.B4);
-
   const energyBalance =
     (energyA + energyB) > 0
       ? (energyA - energyB) / (energyA + energyB)
       : 0;
-
   currentFeatures = {
     activeSensors,
     totalEnergy,
@@ -1058,12 +867,10 @@ function updateFeatures(){
     directionScore,
     energyBalance
   };
-
   document.getElementById("activeSensors").textContent = activeSensors + " / 8";
   document.getElementById("totalEnergy").textContent = totalEnergy.toFixed(1);
   document.getElementById("eventDuration").textContent = currentFeatures.duration.toFixed(2) + " s";
   document.getElementById("directionScore").textContent = directionScore.toFixed(2);
-
   document.getElementById("classActiveSensors").textContent = activeSensors;
   document.getElementById("classDirectionScore").textContent = directionScore.toFixed(2);
   document.getElementById("energyBalance").textContent = energyBalance.toFixed(2);
@@ -1072,11 +879,9 @@ function updateFeatures(){
 function classifyCurrentEvent(){
   const energy = currentFeatures.totalEnergy;
   const active = currentFeatures.activeSensors;
-
   let label = "No event";
   let icon = "⏳";
   let confidence = 0;
-
   if (energy > 180 && active >= 5) {
     label = "Heavy car";
     icon = "🚛";
@@ -1090,32 +895,25 @@ function classifyCurrentEvent(){
     icon = "🚶";
     confidence = Math.min(92, 68 + active * 5);
   }
-
   return { label, icon, confidence };
 }
 
 function maybeClassifyEvent(){
   const result = classifyCurrentEvent();
-
   if (result.label === "No event") return;
-
   document.getElementById("lastClass").textContent = result.icon + " " + result.label;
   document.getElementById("lastClassSub").textContent = "confidence " + result.confidence + "%";
-
   document.getElementById("currentIcon").textContent = result.icon;
   document.getElementById("currentLabel").textContent = result.label;
   document.getElementById("currentConfidence").textContent =
     "confidence " + result.confidence + "%";
-
   const now = new Date();
   const time = now.toLocaleTimeString() + "." + String(now.getMilliseconds()).padStart(3, "0");
-
   const lastEvent = events[0];
   const shouldAdd =
     !lastEvent ||
     lastEvent.label !== result.label ||
     Date.now() - lastEvent.timestamp > 2500;
-
   if (shouldAdd) {
     events.unshift({
       time,
@@ -1124,7 +922,6 @@ function maybeClassifyEvent(){
       icon: result.icon,
       timestamp: Date.now()
     });
-
     events = events.slice(0, 12);
     renderEvents();
   }
@@ -1132,21 +929,16 @@ function maybeClassifyEvent(){
 
 function connectMqtt(){
   document.getElementById("brokerText").textContent = MQTT_CONFIG.brokerUrl;
-
   if (!MQTT_CONFIG.enabled) {
     logMqtt("MQTT disabled");
     return;
   }
-
   try {
     mqttClient = mqtt.connect(MQTT_CONFIG.brokerUrl, MQTT_CONFIG.options);
-
     mqttClient.on("connect", () => {
       mqttConnected = true;
       updateStatusBadges();
-
       logMqtt("MQTT connected");
-
       mqttClient.subscribe([
         MQTT_CONFIG.topicPiezoA,
         MQTT_CONFIG.topicPiezoB,
@@ -1160,10 +952,8 @@ function connectMqtt(){
         }
       });
     });
-
     mqttClient.on("message", (topic, message) => {
       const payloadText = message.toString();
-
       if (topic === MQTT_CONFIG.topicPiezoA) {
         parsePiezoPayload(payloadText, "A");
       } else if (topic === MQTT_CONFIG.topicPiezoB) {
@@ -1174,26 +964,22 @@ function connectMqtt(){
         logMqtt("Unhandled topic: " + topic);
       }
     });
-
     mqttClient.on("reconnect", () => {
       mqttConnected = false;
       updateStatusBadges();
       logMqtt("MQTT reconnecting...");
     });
-
     mqttClient.on("close", () => {
       mqttConnected = false;
       updateStatusBadges();
       logMqtt("MQTT connection closed");
     });
-
     mqttClient.on("error", error => {
       mqttConnected = false;
       updateStatusBadges();
       console.error("MQTT error:", error);
       logMqtt("MQTT error: " + error.message);
     });
-
   } catch (error) {
     mqttConnected = false;
     updateStatusBadges();
@@ -1205,13 +991,10 @@ function connectMqtt(){
 function mainLoop(){
   const now = Date.now();
   const mqttDataIsFresh = mqttConnected && now - lastMqttMessageTime < 3000;
-
   if (!mqttDataIsFresh) {
     generateRandomFallbackData();
   }
-
   updateStatusBadges();
-
   if (now - lastPiezoMessageTime > 500 && mqttDataIsFresh) {
     updateFeatures();
   }
@@ -1219,13 +1002,10 @@ function mainLoop(){
 
 function toggleTraining(){
   trainingActive = !trainingActive;
-
   document.getElementById("startBtn").textContent =
     trainingActive ? "Pause Training" : "Start Training";
-
   const s = document.getElementById("trainStatus");
   s.className = trainingActive ? "status on" : "status";
-
   s.textContent = trainingActive
     ? "Training active. Press P/L/H after a complete event is detected."
     : "Training paused. Click Start Training first.";
@@ -1233,24 +1013,19 @@ function toggleTraining(){
 
 function addTraining(label){
   const s = document.getElementById("trainStatus");
-
   if (!trainingActive) {
     s.className = "status";
     s.textContent = "Training is paused. Click Start Training first.";
     return;
   }
-
   counts[label]++;
-
   s.className = "status on";
   s.textContent = "Added 1 " + label + " event.";
-
   renderProgress();
 }
 
 document.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
-
   if (k === "p") addTraining("Pedestrian");
   if (k === "l") addTraining("Light car");
   if (k === "h") addTraining("Heavy car");
@@ -1259,10 +1034,8 @@ document.addEventListener("keydown", e => {
 function renderProgress(){
   const area = document.getElementById("progressArea");
   area.innerHTML = "";
-
   Object.keys(counts).forEach(label => {
     const pct = Math.min(100, counts[label] / target * 100);
-
     area.innerHTML += `
       <div class="progress-row">
         <div><b>${label}</b> — ${counts[label]} / ${target}</div>
@@ -1277,7 +1050,6 @@ function renderProgress(){
 function renderEvents(){
   const feed = document.getElementById("eventFeed");
   feed.innerHTML = "";
-
   if (events.length === 0) {
     feed.innerHTML = `
       <div class="event">
@@ -1290,17 +1062,13 @@ function renderEvents(){
     `;
     return;
   }
-
   events.forEach((e, i) => {
     const div = document.createElement("div");
-
     div.className = "event" + (selectedEvent === i ? " selected" : "");
-
     div.onclick = () => {
       selectedEvent = i;
       renderEvents();
     };
-
     div.innerHTML = `
       <div>
         <b>${e.icon} ${e.label}</b><br>
@@ -1308,7 +1076,6 @@ function renderEvents(){
       </div>
       <div>${e.conf}% confidence</div>
     `;
-
     feed.appendChild(div);
   });
 }
@@ -1318,10 +1085,8 @@ function clearSelectedEvent(){
     alert("Click an event first.");
     return;
   }
-
   events.splice(selectedEvent, 1);
   selectedEvent = null;
-
   renderEvents();
 }
 
@@ -1340,7 +1105,6 @@ updateEnvironmentDisplay();
 updateFeatures();
 updateStatusBadges();
 connectMqtt();
-
 setInterval(mainLoop, 100);
 </script>
 </body>
