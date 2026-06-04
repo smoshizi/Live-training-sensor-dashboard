@@ -806,7 +806,7 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
   arr.shift();
   labels.shift();
 
-  arr.push(numericValue);
+  arr.push({ x: formatTimeLabel(timestampMs), y: numericValue });
   labels.push(formatTimeLabel(timestampMs));
 
   chart.update("none");
@@ -857,7 +857,7 @@ function pushChartBatch(sensorId, samples){
     arr.shift();
     labels.shift();
 
-    arr.push(numericValue);
+    arr.push({ x: formatTimeLabel(liveTimestamp), y: numericValue });
     labels.push(formatTimeLabel(liveTimestamp));
 
     latestSensorValues[sensorId] = numericValue;
