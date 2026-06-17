@@ -311,7 +311,7 @@
   <div class="badges">
     <span id="mqttBadge">MQTT Connecting</span>
     <span id="dataBadge">Random Fallback</span>
-    <span>KNN Ready</span>
+    <span id="knnBadge">KNN Not Trained</span>
   </div>
 </header>
 <div class="container">
@@ -357,6 +357,7 @@
       <div class="metric-sub">from iot/tempB</div>
     </div>
   </div>
+
   <div class="tabs">
     <button class="active" onclick="showTab('live',this)">Live Plots</button>
     <button onclick="showTab('training',this)">Training</button>
@@ -364,6 +365,7 @@
     <button onclick="showTab('classify',this)">Classify</button>
     <button onclick="showTab('mqtt',this)">MQTT Status</button>
   </div>
+
   <section id="live" class="tab active">
     <div class="main-grid">
       <div class="card">
@@ -386,22 +388,23 @@
             Vehicle direction: top → bottom
           </div>
           <div class="arrow"></div>
-          <div id="map_B1" class="sensor" style="left:50%;top:12%">B1</div>
-          <div id="map_A1" class="sensor" style="left:90%;top:12%">A1</div>
-          <div id="map_A2" class="sensor" style="left:90%;top:35%">A2</div>
-          <div id="map_B2" class="sensor" style="left:50%;top:50%">B2</div>
-          <div id="map_B4" class="sensor" style="left:64%;top:50%">B4</div>
-          <div id="map_A3" class="sensor" style="left:90%;top:50%">A3</div>
-          <div id="map_B3" class="sensor" style="left:50%;top:88%">B3</div>
-          <div id="map_A4" class="sensor" style="left:64%;top:88%">A4</div>
+          <div id="map_B1" class="sensor" style="left:80%;top:12.5%">B1</div>
+          <div id="map_A1" class="sensor" style="left:20%;top:12.5%">A1</div>
+          <div id="map_A2" class="sensor" style="left:20%;top:25%">A2</div>
+          <div id="map_B2" class="sensor" style="left:80%;top:37.5%">B2</div>
+          <div id="map_B4" class="sensor" style="left:80%;top:50%">B4</div>
+          <div id="map_A3" class="sensor" style="left:20%;top:37.5%">A3</div>
+          <div id="map_B3" class="sensor" style="left:20%;top:62.5%">B3</div>
+          <div id="map_A4" class="sensor" style="left:80%;top:62.5%">A4</div>
         </div>
       </div>
     </div>
   </section>
+
   <section id="training" class="tab">
     <div class="main-grid">
       <div class="card">
-        <h2>Training Mode — Label Detected Events</h2>
+        <h2>Training Mode — Label 20-Second Windows</h2>
         <div id="trainStatus" class="status">
           Training paused. Click Start Training first.
         </div>
@@ -418,6 +421,7 @@
         </div>
         <div id="progressArea"></div>
       </div>
+
       <div class="card">
         <h2>Controls</h2>
         <button class="control-btn" onclick="toggleTraining()" id="startBtn">
@@ -428,23 +432,46 @@
           Train KNN Model
         </button>
         <br><br>
+        <button class="control-btn secondary" onclick="exportTrainingData()">
+          Export Training Data
+        </button>
+        <br><br>
+        <button class="control-btn secondary" onclick="document.getElementById('importFile').click()">
+          Import Training Data
+        </button>
+        <input
+          type="file"
+          id="importFile"
+          accept=".json,application/json"
+          style="display:none"
+          onchange="importTrainingData(event)"
+        >
+        <br><br>
+        <button class="control-btn secondary" onclick="undoLastTrainingSample()">
+          Undo Last Training Label
+        </button>
+        <br><br>
         <button class="control-btn secondary" onclick="clearSelectedEvent()">
           Clear Selected Event
         </button>
         <p style="color:#6b7280">
-          Target: 30 labelled events per class. Press P/L/H only after the dashboard detects a complete event.
+          Target: 30 labelled 20-second windows per class. Press P/L/H once after the full vehicle or pedestrian event appears inside the 20-second window.
         </p>
       </div>
     </div>
   </section>
+
   <section id="review" class="tab">
     <div class="card">
       <h2>Features Used by Classifier</h2>
       <div class="features">
         <div class="feature">Peak amplitude per sensor</div>
-        <div class="feature">Event duration</div>
-        <div class="feature">Sub-peak count</div>
         <div class="feature">Area / energy per sensor</div>
+        <div class="feature">Total energy</div>
+        <div class="feature">Maximum peak</div>
+        <div class="feature">20-second window duration</div>
+        <div class="feature">Active signal duration inside window</div>
+        <div class="feature">Sub-peak count</div>
         <div class="feature">Weighted X/Y activation centroid</div>
         <div class="feature">Spatial spread radius</div>
         <div class="feature">Top-to-bottom firing order score</div>
@@ -453,6 +480,7 @@
       </div>
     </div>
   </section>
+
   <section id="classify" class="tab">
     <div class="main-grid">
       <div class="card">
@@ -470,6 +498,7 @@
       </div>
     </div>
   </section>
+
   <section id="mqtt" class="tab">
     <div class="main-grid">
       <div class="card">
@@ -492,6 +521,7 @@
     </div>
   </section>
 </div>
+
 <script>
 const MQTT_CONFIG = {
   enabled: true,
@@ -509,16 +539,65 @@ const MQTT_CONFIG = {
 
 const SAMPLE_RATE_HZ = 100;
 const WINDOW_SECONDS = 20;
-const CHART_POINTS = SAMPLE_RATE_HZ * WINDOW_SECONDS;   // 2000 points held in the ring buffer
-const SAMPLE_INTERVAL_MS = 1000 / SAMPLE_RATE_HZ;       // 10 ms
-const WINDOW_MS = WINDOW_SECONDS * 1000;                // 20 000 ms visible window
-const NUM_X_TICKS = 5;                                  // number of FIXED-position x-axis time labels
-const RENDER_FPS = 30;                                  // chart redraw rate (smooth scroll)
+const CHART_POINTS = SAMPLE_RATE_HZ * WINDOW_SECONDS;
+const SAMPLE_INTERVAL_MS = 1000 / SAMPLE_RATE_HZ;
+const WINDOW_MS = WINDOW_SECONDS * 1000;
+const NUM_X_TICKS = 5;
+const RENDER_FPS = 30;
 const RENDER_INTERVAL_MS = 1000 / RENDER_FPS;
+
+const TRAINING_STORAGE_KEY = "piezoTrainingSamples";
+const KNN_MODEL_STORAGE_KEY = "piezoKnnModel";
+
+const RAW_BUFFER_MS = WINDOW_MS;
+const EVENT_THRESHOLD = 5;
+
+const SLAB_TOP_Y = 0.0;
+const SLAB_BOTTOM_Y = 4.0;
 
 const sensorIdsA = ["A1", "A2", "A3", "A4"];
 const sensorIdsB = ["B1", "B2", "B3", "B4"];
 const allSensors = [...sensorIdsB, ...sensorIdsA];
+
+const sensorPositions = {
+  B1: { x: 1.50, y: 0.5 },
+  A1: { x: 0.90, y: 0.5 },
+  A2: { x: 0.90, y: 1.0 },
+  B2: { x: 1.50, y: 1.50 },
+  B4: { x: 1.50, y: 2.0 },
+  A3: { x: 0.90, y: 1.5 },
+  B3: { x: 0.90, y: 2.5 },
+  A4: { x: 1.50, y: 2.5 }
+};
+
+function getFeatureKeys(){
+  const keys = [];
+
+  allSensors.forEach(id => {
+    keys.push("peak_" + id);
+  });
+
+  allSensors.forEach(id => {
+    keys.push("energy_" + id);
+  });
+
+  keys.push("totalEnergy");
+  keys.push("maxPeak");
+  keys.push("windowDuration");
+  keys.push("activeDuration");
+  keys.push("activeSensors");
+  keys.push("centroidX");
+  keys.push("centroidY");
+  keys.push("spatialSpread");
+  keys.push("topToBottomScore");
+  keys.push("energyBalanceAB");
+  keys.push("subPeakCount");
+
+  return keys;
+}
+
+const FEATURE_KEYS = getFeatureKeys();
+
 const charts = {};
 const latestSensorValues = {
   A1: 0, A2: 0, A3: 0, A4: 0,
@@ -528,12 +607,15 @@ const latestEnvironment = {
   temperature: 22,
   humidity: 31
 };
+
 let mqttClient = null;
 let mqttConnected = false;
 let lastMqttMessageTime = 0;
 let lastPiezoMessageTime = 0;
 let tick = 0;
 let eventHistoryBuffer = [];
+let rawTrainingBuffer = [];
+
 let currentFeatures = {
   activeSensors: 0,
   totalEnergy: 0,
@@ -541,6 +623,7 @@ let currentFeatures = {
   directionScore: 0,
   energyBalance: 0
 };
+
 let trainingActive = false;
 let counts = {
   "Pedestrian": 0,
@@ -551,23 +634,85 @@ let target = 30;
 let selectedEvent = null;
 let events = [];
 
+function loadJsonArrayFromStorage(key){
+  try {
+    const stored = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function loadJsonObjectFromStorage(key){
+  try {
+    const stored = JSON.parse(localStorage.getItem(key) || "null");
+    return stored && typeof stored === "object" ? stored : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+let trainingSamples = loadJsonArrayFromStorage(TRAINING_STORAGE_KEY);
+let knnModel = loadJsonObjectFromStorage(KNN_MODEL_STORAGE_KEY);
+
+function saveTrainingSamples(){
+  localStorage.setItem(TRAINING_STORAGE_KEY, JSON.stringify(trainingSamples));
+}
+
+function saveKnnModel(){
+  localStorage.setItem(KNN_MODEL_STORAGE_KEY, JSON.stringify(knnModel));
+}
+
+function clearKnnModel(){
+  knnModel = null;
+  localStorage.removeItem(KNN_MODEL_STORAGE_KEY);
+  updateKnnBadge();
+}
+
+function rebuildCountsFromSamples(){
+  counts = {
+    "Pedestrian": 0,
+    "Light car": 0,
+    "Heavy car": 0
+  };
+
+  trainingSamples.forEach(sample => {
+    if (counts[sample.label] !== undefined) {
+      counts[sample.label]++;
+    }
+  });
+}
+
+function getIconForLabel(label){
+  if (label === "Pedestrian") return "🚶";
+  if (label === "Light car") return "🚗";
+  if (label === "Heavy car") return "🚛";
+  return "⏳";
+}
+
+function updateKnnBadge(){
+  const badge = document.getElementById("knnBadge");
+  if (!badge) return;
+
+  const trained =
+    knnModel &&
+    Array.isArray(knnModel.samples) &&
+    knnModel.samples.length > 0 &&
+    knnModel.scaler &&
+    Array.isArray(knnModel.scaler.means) &&
+    knnModel.scaler.means.length === FEATURE_KEYS.length;
+
+  badge.textContent = trained ? "KNN Trained" : "KNN Not Trained";
+  badge.style.background = trained ? "#e8f5e9" : "#fff7ed";
+  badge.style.color = trained ? "#166534" : "#9a3412";
+}
+
 function showTab(id, btn){
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   btn.classList.add("active");
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// REAL-TIME X-AXIS
-//
-// Each data point is stored as {x: unixMs, y: value} on a LINEAR axis.
-// A single requestAnimationFrame loop (renderLoop) slides the visible window to
-// [now - 20s, now] every frame, so the trace and gridlines scroll smoothly to
-// the left in real time — independent of how fast/bursty MQTT data arrives.
-// Custom ticks are placed at fixed 4-second wall-clock boundaries via
-// afterBuildTicks, and formatted HH:MM:SS by the tick callback.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function formatTimeLabel(ms){
   const d = new Date(ms);
@@ -577,8 +722,6 @@ function formatTimeLabel(ms){
   return `${h}:${m}:${s}`;
 }
 
-// Pre-fill the ring buffer with flat (y=0) points spanning the last 20 s so the
-// chart is correctly scaled from the very first frame.
 function makeInitialData(){
   const now = Date.now();
   return Array.from({ length: CHART_POINTS }, (_, i) => ({
@@ -637,7 +780,7 @@ function makePlot(id, parent){
     data: {
       datasets: [{
         label: id,
-        data: makeInitialData(),     // [{x: unixMs, y: value}, ...]
+        data: makeInitialData(),
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.15,
@@ -648,7 +791,7 @@ function makePlot(id, parent){
       animation: false,
       responsive: true,
       maintainAspectRatio: false,
-      parsing: false,                // data is already in {x, y} form — faster
+      parsing: false,
       normalized: true,
       plugins: {
         legend: { display: false }
@@ -658,10 +801,6 @@ function makePlot(id, parent){
           type: "linear",
           min: now - WINDOW_MS,
           max: now,
-          // Ticks at FIXED fractional positions across the window, so every
-          // gridline stays at a constant pixel position. As the window slides,
-          // the time VALUE at each fixed position advances — so the labels
-          // update in place (counting up) without the gridlines moving sideways.
           afterBuildTicks: (scale) => {
             const ticks = [];
             const span = scale.max - scale.min;
@@ -742,7 +881,6 @@ function updateDynamicYAxis(chart){
   chart.options.scales.y.max = max + padding;
 }
 
-// Data ingestion only — NO chart.update() here. The renderLoop draws.
 function pushChartValue(sensorId, value, timestampMs = Date.now()){
   if (!charts[sensorId]) return;
   const numericValue = Number(value) || 0;
@@ -750,9 +888,20 @@ function pushChartValue(sensorId, value, timestampMs = Date.now()){
   const arr = charts[sensorId].data.datasets[0].data;
   arr.shift();
   arr.push({ x: timestampMs, y: numericValue });
+  storeRawSample(sensorId, numericValue, timestampMs);
 }
 
-// Data ingestion only — samples are timestamped evenly, ending at "now".
+function storeRawSample(sensorId, value, ts){
+  rawTrainingBuffer.push({
+    sensorId,
+    value: Number(value) || 0,
+    ts
+  });
+
+  const cutoff = Date.now() - RAW_BUFFER_MS;
+  rawTrainingBuffer = rawTrainingBuffer.filter(sample => sample.ts >= cutoff);
+}
+
 function pushChartBatch(sensorId, samples){
   if (!charts[sensorId] || !Array.isArray(samples)) return;
   const arr = charts[sensorId].data.datasets[0].data;
@@ -770,14 +919,10 @@ function pushChartBatch(sensorId, samples){
       ts,
       deviceTs: Number(sample.ts) || null
     });
+    storeRawSample(sensorId, numericValue, ts);
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// renderLoop: the ONLY place charts are redrawn. Runs at ~30 fps via rAF.
-// Slides every chart's window to [now - 20s, now] so the x-axis advances in
-// real time and the waveform scrolls left smoothly.
-// ─────────────────────────────────────────────────────────────────────────────
 let lastRenderTime = 0;
 function renderLoop(timestamp){
   if (timestamp - lastRenderTime >= RENDER_INTERVAL_MS) {
@@ -894,32 +1039,39 @@ function updateFeatures(){
   const absValues = Object.values(latestSensorValues).map(v => Math.abs(v));
   const activeSensors = absValues.filter(v => v > 5).length;
   const totalEnergy = absValues.reduce((sum, v) => sum + v, 0);
+
   const topEnergy =
     Math.abs(latestSensorValues.A1) +
     Math.abs(latestSensorValues.B1) +
     Math.abs(latestSensorValues.A2);
+
   const bottomEnergy =
     Math.abs(latestSensorValues.A4) +
     Math.abs(latestSensorValues.B3) +
     Math.abs(latestSensorValues.A3);
+
   const directionScore =
     (bottomEnergy + topEnergy) > 0
       ? bottomEnergy / (bottomEnergy + topEnergy)
       : 0;
+
   const energyA =
     Math.abs(latestSensorValues.A1) +
     Math.abs(latestSensorValues.A2) +
     Math.abs(latestSensorValues.A3) +
     Math.abs(latestSensorValues.A4);
+
   const energyB =
     Math.abs(latestSensorValues.B1) +
     Math.abs(latestSensorValues.B2) +
     Math.abs(latestSensorValues.B3) +
     Math.abs(latestSensorValues.B4);
+
   const energyBalance =
     (energyA + energyB) > 0
       ? (energyA - energyB) / (energyA + energyB)
       : 0;
+
   currentFeatures = {
     activeSensors,
     totalEnergy,
@@ -927,6 +1079,7 @@ function updateFeatures(){
     directionScore,
     energyBalance
   };
+
   document.getElementById("activeSensors").textContent = activeSensors + " / 8";
   document.getElementById("totalEnergy").textContent = totalEnergy.toFixed(1);
   document.getElementById("eventDuration").textContent = currentFeatures.duration.toFixed(2) + " s";
@@ -936,12 +1089,337 @@ function updateFeatures(){
   document.getElementById("energyBalance").textContent = energyBalance.toFixed(2);
 }
 
+function clamp(value, min, max){
+  return Math.max(min, Math.min(max, value));
+}
+
+function countSubPeaks(values){
+  if (!Array.isArray(values) || values.length < 3) return 0;
+
+  const absValues = values.map(v => Math.abs(v));
+  const maxValue = Math.max(...absValues);
+
+  if (maxValue < EVENT_THRESHOLD) return 0;
+
+  const threshold = Math.max(EVENT_THRESHOLD, maxValue * 0.30);
+
+  let count = 0;
+  let lastPeakIndex = -20;
+
+  for (let i = 1; i < absValues.length - 1; i++) {
+    const isPeak =
+      absValues[i] > threshold &&
+      absValues[i] > absValues[i - 1] &&
+      absValues[i] >= absValues[i + 1];
+
+    if (isPeak && i - lastPeakIndex >= 10) {
+      count++;
+      lastPeakIndex = i;
+    }
+  }
+
+  return count;
+}
+
+function computeFeaturesFromWindowSamples(windowSamples, startTs, endTs){
+  const features = {};
+  const energyBySensor = {};
+  const peakBySensor = {};
+  const firstActivationBySensor = {};
+  const valuesBySensor = {};
+
+  allSensors.forEach(id => {
+    energyBySensor[id] = 0;
+    peakBySensor[id] = 0;
+    valuesBySensor[id] = [];
+  });
+
+  let firstActiveTs = null;
+  let lastActiveTs = null;
+
+  windowSamples.forEach(sample => {
+    if (!allSensors.includes(sample.sensorId)) return;
+
+    const value = Number(sample.value) || 0;
+    const absValue = Math.abs(value);
+
+    energyBySensor[sample.sensorId] += absValue;
+    peakBySensor[sample.sensorId] = Math.max(
+      peakBySensor[sample.sensorId],
+      absValue
+    );
+
+    valuesBySensor[sample.sensorId].push(value);
+
+    if (absValue >= EVENT_THRESHOLD) {
+      if (firstActiveTs === null || sample.ts < firstActiveTs) {
+        firstActiveTs = sample.ts;
+      }
+
+      if (lastActiveTs === null || sample.ts > lastActiveTs) {
+        lastActiveTs = sample.ts;
+      }
+
+      if (firstActivationBySensor[sample.sensorId] === undefined) {
+        firstActivationBySensor[sample.sensorId] = sample.ts;
+      }
+    }
+  });
+
+  let totalEnergy = 0;
+  let maxPeak = 0;
+  let activeSensors = 0;
+  let weightedX = 0;
+  let weightedY = 0;
+  let totalSubPeakCount = 0;
+
+  allSensors.forEach(id => {
+    const peak = peakBySensor[id];
+    const energy = energyBySensor[id];
+
+    features["peak_" + id] = peak;
+    features["energy_" + id] = energy;
+
+    totalEnergy += energy;
+    maxPeak = Math.max(maxPeak, peak);
+
+    if (peak >= EVENT_THRESHOLD) {
+      activeSensors++;
+    }
+
+    weightedX += sensorPositions[id].x * energy;
+    weightedY += sensorPositions[id].y * energy;
+
+    totalSubPeakCount += countSubPeaks(valuesBySensor[id]);
+  });
+
+  const centroidX = totalEnergy > 0 ? weightedX / totalEnergy : 0;
+  const centroidY = totalEnergy > 0 ? weightedY / totalEnergy : 0;
+
+  let spreadSum = 0;
+
+  allSensors.forEach(id => {
+    const dx = sensorPositions[id].x - centroidX;
+    const dy = sensorPositions[id].y - centroidY;
+    const distanceSquared = dx * dx + dy * dy;
+    spreadSum += energyBySensor[id] * distanceSquared;
+  });
+
+  const spatialSpread =
+    totalEnergy > 0 ? Math.sqrt(spreadSum / totalEnergy) : 0;
+
+  const energyA =
+    energyBySensor.A1 +
+    energyBySensor.A2 +
+    energyBySensor.A3 +
+    energyBySensor.A4;
+
+  const energyB =
+    energyBySensor.B1 +
+    energyBySensor.B2 +
+    energyBySensor.B3 +
+    energyBySensor.B4;
+
+  const energyBalanceAB =
+    energyA + energyB > 0 ? (energyA - energyB) / (energyA + energyB) : 0;
+
+  const firingPairs = [];
+
+  allSensors.forEach(id => {
+    if (firstActivationBySensor[id] !== undefined) {
+      firingPairs.push({
+        y: sensorPositions[id].y,
+        t: firstActivationBySensor[id]
+      });
+    }
+  });
+
+  let topToBottomScore = 0.5;
+
+  if (firingPairs.length >= 2) {
+    const minT = Math.min(...firingPairs.map(p => p.t));
+    const maxT = Math.max(...firingPairs.map(p => p.t));
+    const timeRange = Math.max(1, maxT - minT);
+
+    const normalized = firingPairs.map(p => ({
+      y: (p.y - SLAB_TOP_Y) / Math.max(1, SLAB_BOTTOM_Y - SLAB_TOP_Y),
+      t: (p.t - minT) / timeRange
+    }));
+
+    const meanY =
+      normalized.reduce((sum, p) => sum + p.y, 0) / normalized.length;
+
+    const meanT =
+      normalized.reduce((sum, p) => sum + p.t, 0) / normalized.length;
+
+    let covariance = 0;
+    let varianceY = 0;
+
+    normalized.forEach(p => {
+      covariance += (p.y - meanY) * (p.t - meanT);
+      varianceY += Math.pow(p.y - meanY, 2);
+    });
+
+    const slope = varianceY > 0 ? covariance / varianceY : 0;
+
+    topToBottomScore = clamp(0.5 + slope / 2, 0, 1);
+  }
+
+  features.totalEnergy = totalEnergy;
+  features.maxPeak = maxPeak;
+  features.windowDuration = Math.max(0, (endTs - startTs) / 1000);
+
+  features.activeDuration =
+    firstActiveTs !== null && lastActiveTs !== null
+      ? Math.max(0, (lastActiveTs - firstActiveTs) / 1000)
+      : 0;
+
+  features.activeSensors = activeSensors;
+  features.centroidX = centroidX;
+  features.centroidY = centroidY;
+  features.spatialSpread = spatialSpread;
+  features.topToBottomScore = topToBottomScore;
+  features.energyBalanceAB = energyBalanceAB;
+  features.subPeakCount = totalSubPeakCount;
+
+  return features;
+}
+
+function getCurrent20SecondWindowFeatures(){
+  const endTs = Date.now();
+  const startTs = endTs - RAW_BUFFER_MS;
+
+  const windowSamples = rawTrainingBuffer.filter(sample => {
+    return sample.ts >= startTs && sample.ts <= endTs;
+  });
+
+  if (windowSamples.length === 0) {
+    return null;
+  }
+
+  return computeFeaturesFromWindowSamples(windowSamples, startTs, endTs);
+}
+
+function makeRawFeatureVector(features){
+  return FEATURE_KEYS.map(key => Number(features[key]) || 0);
+}
+
+function buildScaler(samples){
+  const rawVectors = samples.map(sample => makeRawFeatureVector(sample.features));
+  const means = [];
+  const stds = [];
+
+  for (let i = 0; i < FEATURE_KEYS.length; i++) {
+    const values = rawVectors.map(vector => vector[i]);
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+
+    const variance =
+      values.reduce((sum, value) => {
+        return sum + Math.pow(value - mean, 2);
+      }, 0) / values.length;
+
+    const std = Math.sqrt(variance) || 1;
+
+    means.push(mean);
+    stds.push(std);
+  }
+
+  return { means, stds };
+}
+
+function scaleVector(rawVector, scaler){
+  return rawVector.map((value, index) => {
+    return (value - scaler.means[index]) / scaler.stds[index];
+  });
+}
+
+function euclideanDistance(a, b){
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    sum += Math.pow(a[i] - b[i], 2);
+  }
+  return Math.sqrt(sum);
+}
+
+function classifyWithKnn(features){
+  if (
+    !knnModel ||
+    !Array.isArray(knnModel.samples) ||
+    knnModel.samples.length === 0 ||
+    !knnModel.scaler ||
+    !Array.isArray(knnModel.scaler.means) ||
+    knnModel.scaler.means.length !== FEATURE_KEYS.length
+  ) {
+    return null;
+  }
+
+  if (!features || features.activeSensors === 0 || features.totalEnergy < EVENT_THRESHOLD) {
+    return {
+      label: "No event",
+      icon: "⏳",
+      confidence: 0
+    };
+  }
+
+  const rawVector = makeRawFeatureVector(features);
+  const currentVector = scaleVector(rawVector, knnModel.scaler);
+
+  const distances = knnModel.samples.map(sample => ({
+    label: sample.label,
+    distance: euclideanDistance(currentVector, sample.vector)
+  }));
+
+  distances.sort((a, b) => a.distance - b.distance);
+
+  const k = Math.min(5, distances.length);
+  const nearest = distances.slice(0, k);
+
+  const scores = {};
+
+  nearest.forEach(item => {
+    const weight = 1 / (item.distance + 0.0001);
+    scores[item.label] = (scores[item.label] || 0) + weight;
+  });
+
+  let bestLabel = "No event";
+  let bestScore = 0;
+  let totalScore = 0;
+
+  Object.keys(scores).forEach(label => {
+    totalScore += scores[label];
+
+    if (scores[label] > bestScore) {
+      bestScore = scores[label];
+      bestLabel = label;
+    }
+  });
+
+  const confidence =
+    totalScore > 0 ? Math.round((bestScore / totalScore) * 100) : 0;
+
+  return {
+    label: bestLabel,
+    icon: getIconForLabel(bestLabel),
+    confidence
+  };
+}
+
 function classifyCurrentEvent(){
+  const windowFeatures = getCurrent20SecondWindowFeatures();
+
+  if (windowFeatures && knnModel) {
+    const knnResult = classifyWithKnn(windowFeatures);
+    if (knnResult) {
+      return knnResult;
+    }
+  }
+
   const energy = currentFeatures.totalEnergy;
   const active = currentFeatures.activeSensors;
   let label = "No event";
   let icon = "⏳";
   let confidence = 0;
+
   if (energy > 180 && active >= 5) {
     label = "Heavy car";
     icon = "🚛";
@@ -955,25 +1433,30 @@ function classifyCurrentEvent(){
     icon = "🚶";
     confidence = Math.min(92, 68 + active * 5);
   }
+
   return { label, icon, confidence };
 }
 
 function maybeClassifyEvent(){
   const result = classifyCurrentEvent();
   if (result.label === "No event") return;
+
   document.getElementById("lastClass").textContent = result.icon + " " + result.label;
   document.getElementById("lastClassSub").textContent = "confidence " + result.confidence + "%";
   document.getElementById("currentIcon").textContent = result.icon;
   document.getElementById("currentLabel").textContent = result.label;
   document.getElementById("currentConfidence").textContent =
     "confidence " + result.confidence + "%";
+
   const now = new Date();
   const time = now.toLocaleTimeString() + "." + String(now.getMilliseconds()).padStart(3, "0");
+
   const lastEvent = events[0];
   const shouldAdd =
     !lastEvent ||
     lastEvent.label !== result.label ||
     Date.now() - lastEvent.timestamp > 2500;
+
   if (shouldAdd) {
     events.unshift({
       time,
@@ -993,12 +1476,15 @@ function connectMqtt(){
     logMqtt("MQTT disabled");
     return;
   }
+
   try {
     mqttClient = mqtt.connect(MQTT_CONFIG.brokerUrl, MQTT_CONFIG.options);
+
     mqttClient.on("connect", () => {
       mqttConnected = true;
       updateStatusBadges();
       logMqtt("MQTT connected");
+
       mqttClient.subscribe([
         MQTT_CONFIG.topicPiezoA,
         MQTT_CONFIG.topicPiezoB,
@@ -1012,8 +1498,10 @@ function connectMqtt(){
         }
       });
     });
+
     mqttClient.on("message", (topic, message) => {
       const payloadText = message.toString();
+
       if (topic === MQTT_CONFIG.topicPiezoA) {
         parsePiezoPayload(payloadText, "A");
       } else if (topic === MQTT_CONFIG.topicPiezoB) {
@@ -1024,16 +1512,19 @@ function connectMqtt(){
         logMqtt("Unhandled topic: " + topic);
       }
     });
+
     mqttClient.on("reconnect", () => {
       mqttConnected = false;
       updateStatusBadges();
       logMqtt("MQTT reconnecting...");
     });
+
     mqttClient.on("close", () => {
       mqttConnected = false;
       updateStatusBadges();
       logMqtt("MQTT connection closed");
     });
+
     mqttClient.on("error", error => {
       mqttConnected = false;
       updateStatusBadges();
@@ -1048,15 +1539,16 @@ function connectMqtt(){
   }
 }
 
-// mainLoop: data-side housekeeping only (fallback generation, badges, features).
-// Chart drawing is handled separately by renderLoop.
 function mainLoop(){
   const now = Date.now();
   const mqttDataIsFresh = mqttConnected && now - lastMqttMessageTime < 3000;
+
   if (!mqttDataIsFresh) {
     generateRandomFallbackData();
   }
+
   updateStatusBadges();
+
   if (now - lastPiezoMessageTime > 500 && mqttDataIsFresh) {
     updateFeatures();
   }
@@ -1064,25 +1556,72 @@ function mainLoop(){
 
 function toggleTraining(){
   trainingActive = !trainingActive;
+
   document.getElementById("startBtn").textContent =
     trainingActive ? "Pause Training" : "Start Training";
+
   const s = document.getElementById("trainStatus");
   s.className = trainingActive ? "status on" : "status";
   s.textContent = trainingActive
-    ? "Training active. Press P/L/H after a complete event is detected."
-    : "Training paused. Click Start Training first.";
+    ? "Training active. Press P/L/H once after the event appears in the 20-second window."
+    : "Training paused. Labelled samples are saved in this browser.";
 }
 
 function addTraining(label){
   const s = document.getElementById("trainStatus");
+
   if (!trainingActive) {
     s.className = "status";
     s.textContent = "Training is paused. Click Start Training first.";
     return;
   }
-  counts[label]++;
+
+  const mqttDataIsFresh = mqttConnected && Date.now() - lastMqttMessageTime < 3000;
+
+  if (!mqttDataIsFresh) {
+    const proceed = confirm(
+      "The dashboard is not receiving fresh MQTT data.\n\n" +
+      "Do you still want to save this 20-second window as " + label + "?"
+    );
+
+    if (!proceed) return;
+  }
+
+  const windowFeatures = getCurrent20SecondWindowFeatures();
+
+  if (!windowFeatures) {
+    s.className = "status";
+    s.textContent =
+      "No 20-second sensor window found yet. Wait for live sensor data, then label again.";
+    return;
+  }
+
+  if (windowFeatures.activeSensors === 0) {
+    const proceed = confirm(
+      "No strong sensor activity was found in the last 20 seconds.\n\n" +
+      "Do you still want to save this as " + label + "?"
+    );
+
+    if (!proceed) return;
+  }
+
+  const sample = {
+    label,
+    features: windowFeatures,
+    timestamp: new Date().toISOString(),
+    windowSeconds: RAW_BUFFER_MS / 1000,
+    featureKeys: FEATURE_KEYS
+  };
+
+  trainingSamples.push(sample);
+  saveTrainingSamples();
+  rebuildCountsFromSamples();
+  clearKnnModel();
+
   s.className = "status on";
-  s.textContent = "Added 1 " + label + " event.";
+  s.textContent =
+    "Saved 1 " + label + " sample using the full last 20-second window. Train KNN again before classifying.";
+
   renderProgress();
 }
 
@@ -1096,6 +1635,7 @@ document.addEventListener("keydown", e => {
 function renderProgress(){
   const area = document.getElementById("progressArea");
   area.innerHTML = "";
+
   Object.keys(counts).forEach(label => {
     const pct = Math.min(100, counts[label] / target * 100);
     area.innerHTML += `
@@ -1107,11 +1647,18 @@ function renderProgress(){
       </div>
     `;
   });
+
+  area.innerHTML += `
+    <div class="progress-row">
+      <div><b>Total saved 20-second samples</b> — ${trainingSamples.length}</div>
+    </div>
+  `;
 }
 
 function renderEvents(){
   const feed = document.getElementById("eventFeed");
   feed.innerHTML = "";
+
   if (events.length === 0) {
     feed.innerHTML = `
       <div class="event">
@@ -1124,6 +1671,7 @@ function renderEvents(){
     `;
     return;
   }
+
   events.forEach((e, i) => {
     const div = document.createElement("div");
     div.className = "event" + (selectedEvent === i ? " selected" : "");
@@ -1147,25 +1695,221 @@ function clearSelectedEvent(){
     alert("Click an event first.");
     return;
   }
+
   events.splice(selectedEvent, 1);
   selectedEvent = null;
   renderEvents();
 }
 
 function trainKnnModel(){
+  rebuildCountsFromSamples();
+
+  if (trainingSamples.length === 0) {
+    alert("No labelled training samples saved yet.");
+    return;
+  }
+
+  const missingClasses = Object.keys(counts).filter(label => counts[label] === 0);
+
+  if (missingClasses.length > 0) {
+    alert(
+      "You need at least one sample for each class before training.\n\nMissing: " +
+      missingClasses.join(", ")
+    );
+    return;
+  }
+
+  const lowClasses = Object.keys(counts).filter(label => counts[label] < target);
+
+  if (lowClasses.length > 0) {
+    const proceed = confirm(
+      "Some classes have fewer than " + target + " samples:\n\n" +
+      lowClasses.map(label => label + ": " + counts[label] + " / " + target).join("\n") +
+      "\n\nYou can still train now, but accuracy may be poor. Continue?"
+    );
+
+    if (!proceed) return;
+  }
+
+  const validSamples = trainingSamples.filter(sample => {
+    return sample && sample.label && sample.features && counts[sample.label] !== undefined;
+  });
+
+  if (validSamples.length === 0) {
+    alert("No valid training samples found.");
+    return;
+  }
+
+  const scaler = buildScaler(validSamples);
+
+  knnModel = {
+    trainedAt: new Date().toISOString(),
+    featureKeys: FEATURE_KEYS,
+    sensorPositions,
+    slabTopY: SLAB_TOP_Y,
+    slabBottomY: SLAB_BOTTOM_Y,
+    scaler,
+    samples: validSamples.map(sample => {
+      const rawVector = makeRawFeatureVector(sample.features);
+      const scaledVector = scaleVector(rawVector, scaler);
+
+      return {
+        label: sample.label,
+        vector: scaledVector
+      };
+    })
+  };
+
+  saveKnnModel();
+  updateKnnBadge();
+
   alert(
-    "KNN model training placeholder. Labelled events:\n\n" +
+    "KNN model trained with full 20-second-window features.\n\n" +
+    "Total samples: " + validSamples.length + "\n" +
     "Pedestrian: " + counts["Pedestrian"] + "\n" +
     "Light car: " + counts["Light car"] + "\n" +
-    "Heavy car: " + counts["Heavy car"]
+    "Heavy car: " + counts["Heavy car"] + "\n\n" +
+    "You can now use the Classify tab."
   );
 }
 
+function exportTrainingData(){
+  if (trainingSamples.length === 0) {
+    alert("No training data to export yet.");
+    return;
+  }
+
+  const exportObject = {
+    exportedAt: new Date().toISOString(),
+    version: "20s-window-full-features-v1",
+    windowSeconds: RAW_BUFFER_MS / 1000,
+    featureKeys: FEATURE_KEYS,
+    sensorPositions,
+    slabTopY: SLAB_TOP_Y,
+    slabBottomY: SLAB_BOTTOM_Y,
+    samples: trainingSamples
+  };
+
+  const blob = new Blob(
+    [JSON.stringify(exportObject, null, 2)],
+    { type: "application/json" }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = "piezo_training_data_20s_window.json";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function importTrainingData(event){
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function(e){
+    try {
+      const imported = JSON.parse(e.target.result);
+
+      let importedSamples = [];
+
+      if (Array.isArray(imported)) {
+        importedSamples = imported;
+      } else if (Array.isArray(imported.samples)) {
+        importedSamples = imported.samples;
+      } else {
+        alert("Invalid training data file.");
+        return;
+      }
+
+      importedSamples = importedSamples.filter(sample => {
+        return (
+          sample &&
+          sample.label &&
+          sample.features &&
+          counts[sample.label] !== undefined
+        );
+      });
+
+      if (importedSamples.length === 0) {
+        alert("No valid training samples found in this file.");
+        return;
+      }
+
+      const replaceExisting = confirm(
+        "Import " + importedSamples.length + " samples?\n\n" +
+        "Press OK to replace current saved samples.\n" +
+        "Press Cancel to add them to current samples."
+      );
+
+      if (replaceExisting) {
+        trainingSamples = importedSamples;
+      } else {
+        trainingSamples = trainingSamples.concat(importedSamples);
+      }
+
+      saveTrainingSamples();
+      rebuildCountsFromSamples();
+      clearKnnModel();
+      renderProgress();
+
+      alert(
+        "Training data imported successfully.\n\n" +
+        "Total samples: " + trainingSamples.length + "\n" +
+        "Pedestrian: " + counts["Pedestrian"] + "\n" +
+        "Light car: " + counts["Light car"] + "\n" +
+        "Heavy car: " + counts["Heavy car"] + "\n\n" +
+        "Press Train KNN Model before using classification."
+      );
+
+    } catch (error) {
+      alert("Could not import training data. Please check the JSON file.");
+      console.error(error);
+    }
+
+    event.target.value = "";
+  };
+
+  reader.readAsText(file);
+}
+
+function undoLastTrainingSample(){
+  if (trainingSamples.length === 0) {
+    alert("No training samples to remove.");
+    return;
+  }
+
+  const last = trainingSamples[trainingSamples.length - 1];
+
+  const confirmUndo = confirm(
+    "Remove last labelled training sample?\n\n" +
+    "Label: " + last.label + "\n" +
+    "Time: " + last.timestamp
+  );
+
+  if (!confirmUndo) return;
+
+  trainingSamples.pop();
+  saveTrainingSamples();
+  rebuildCountsFromSamples();
+  clearKnnModel();
+  renderProgress();
+
+  alert("Last training sample removed. Train KNN again before classifying.");
+}
+
+rebuildCountsFromSamples();
 renderProgress();
 renderEvents();
 updateEnvironmentDisplay();
 updateFeatures();
 updateStatusBadges();
+updateKnnBadge();
 connectMqtt();
 setInterval(mainLoop, 100);
 </script>
