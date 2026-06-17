@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Live Training Sensor Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <style>
   body{
@@ -507,10 +506,16 @@ const MQTT_CONFIG = {
     connectTimeout: 8000
   }
 };
+
 const SAMPLE_RATE_HZ = 100;
 const WINDOW_SECONDS = 20;
-const CHART_POINTS = SAMPLE_RATE_HZ * WINDOW_SECONDS;
-const SAMPLE_INTERVAL_MS = 1000 / SAMPLE_RATE_HZ;
+const CHART_POINTS = SAMPLE_RATE_HZ * WINDOW_SECONDS;   // 2000 points held in the ring buffer
+const SAMPLE_INTERVAL_MS = 1000 / SAMPLE_RATE_HZ;       // 10 ms
+const WINDOW_MS = WINDOW_SECONDS * 1000;                // 20 000 ms visible window
+const NUM_X_TICKS = 5;                                  // number of FIXED-position x-axis time labels
+const RENDER_FPS = 30;                                  // chart redraw rate (smooth scroll)
+const RENDER_INTERVAL_MS = 1000 / RENDER_FPS;
+
 const sensorIdsA = ["A1", "A2", "A3", "A4"];
 const sensorIdsB = ["B1", "B2", "B3", "B4"];
 const allSensors = [...sensorIdsB, ...sensorIdsA];
@@ -553,11 +558,28 @@ function showTab(id, btn){
   btn.classList.add("active");
 }
 
-// Build the initial {x, y} point array.
-// x = real Unix ms timestamp, y = 0.
-// Using {x,y} objects with Chart.js time scale means the axis is driven by
-// actual data coordinates — it updates correctly on every chart.update().
-function makeInitialData() {
+// ─────────────────────────────────────────────────────────────────────────────
+// REAL-TIME X-AXIS
+//
+// Each data point is stored as {x: unixMs, y: value} on a LINEAR axis.
+// A single requestAnimationFrame loop (renderLoop) slides the visible window to
+// [now - 20s, now] every frame, so the trace and gridlines scroll smoothly to
+// the left in real time — independent of how fast/bursty MQTT data arrives.
+// Custom ticks are placed at fixed 4-second wall-clock boundaries via
+// afterBuildTicks, and formatted HH:MM:SS by the tick callback.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatTimeLabel(ms){
+  const d = new Date(ms);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+// Pre-fill the ring buffer with flat (y=0) points spanning the last 20 s so the
+// chart is correctly scaled from the very first frame.
+function makeInitialData(){
   const now = Date.now();
   return Array.from({ length: CHART_POINTS }, (_, i) => ({
     x: now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS,
@@ -609,12 +631,13 @@ function makePlot(id, parent){
   `;
   parent.appendChild(div);
   const ctx = document.getElementById(`chart_${id}`);
+  const now = Date.now();
   charts[id] = new Chart(ctx, {
     type: "line",
     data: {
       datasets: [{
         label: id,
-        data: makeInitialData(),   // {x: timestamp_ms, y: value} objects
+        data: makeInitialData(),     // [{x: unixMs, y: value}, ...]
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.15,
@@ -625,22 +648,34 @@ function makePlot(id, parent){
       animation: false,
       responsive: true,
       maintainAspectRatio: false,
+      parsing: false,                // data is already in {x, y} form — faster
+      normalized: true,
       plugins: {
         legend: { display: false }
       },
       scales: {
         x: {
-          type: "time",
-          time: {
-            unit: "second",
-            stepSize: 4,
-            displayFormats: { second: "HH:mm:ss" }
+          type: "linear",
+          min: now - WINDOW_MS,
+          max: now,
+          // Ticks at FIXED fractional positions across the window, so every
+          // gridline stays at a constant pixel position. As the window slides,
+          // the time VALUE at each fixed position advances — so the labels
+          // update in place (counting up) without the gridlines moving sideways.
+          afterBuildTicks: (scale) => {
+            const ticks = [];
+            const span = scale.max - scale.min;
+            const intervals = NUM_X_TICKS - 1;
+            for (let i = 0; i <= intervals; i++) {
+              const value = scale.min + (i / intervals) * span;
+              ticks.push({ value });
+            }
+            scale.ticks = ticks;
           },
           ticks: {
-            maxTicksLimit: 6,
             maxRotation: 0,
-            autoSkip: true,
-            source: "auto"
+            autoSkip: false,
+            callback: (value) => formatTimeLabel(value)
           },
           title: {
             display: true,
@@ -665,12 +700,11 @@ function makePlot(id, parent){
 sensorIdsB.forEach(id => makePlot(id, document.getElementById("bPlots")));
 sensorIdsA.forEach(id => makePlot(id, document.getElementById("aPlots")));
 
-function setSensorActive(sensorId, value){
+function setSensorActive(sensorId){
   const sensor = document.getElementById("map_" + sensorId);
   if (!sensor) return;
   if (!charts[sensorId]) return;
 
-  // Data is now {x, y} objects — extract y values for analysis
   const data = charts[sensorId].data.datasets[0].data
     .map(pt => pt.y)
     .filter(v => Number.isFinite(v));
@@ -680,7 +714,6 @@ function setSensorActive(sensorId, value){
   const absData = data.map(v => Math.abs(v));
   const absPeak = Math.max(...absData);
   const absAvg = absData.reduce((sum, v) => sum + v, 0) / absData.length;
-
   const variance = absData.reduce((sum, v) => sum + Math.pow(v - absAvg, 2), 0) / absData.length;
   const stdDev = Math.sqrt(variance);
   const noiseFloor = absAvg + stdDev;
@@ -694,7 +727,6 @@ function setSensorActive(sensorId, value){
 }
 
 function updateDynamicYAxis(chart){
-  // Data is now {x, y} objects — extract y values
   const values = chart.data.datasets[0].data
     .map(pt => pt.y)
     .filter(v => Number.isFinite(v));
@@ -710,28 +742,20 @@ function updateDynamicYAxis(chart){
   chart.options.scales.y.max = max + padding;
 }
 
-function pushChartValue(sensorId, value){
+// Data ingestion only — NO chart.update() here. The renderLoop draws.
+function pushChartValue(sensorId, value, timestampMs = Date.now()){
   if (!charts[sensorId]) return;
   const numericValue = Number(value) || 0;
   latestSensorValues[sensorId] = numericValue;
-  const chart = charts[sensorId];
-  const arr = chart.data.datasets[0].data;
+  const arr = charts[sensorId].data.datasets[0].data;
   arr.shift();
-  arr.push({ x: Date.now(), y: numericValue });
-  updateDynamicYAxis(chart);
-  chart.update();
-  const valueText = document.getElementById("value_" + sensorId);
-  if (valueText) {
-    valueText.textContent = numericValue.toFixed(2);
-  }
-  setSensorActive(sensorId, numericValue);
+  arr.push({ x: timestampMs, y: numericValue });
 }
 
+// Data ingestion only — samples are timestamped evenly, ending at "now".
 function pushChartBatch(sensorId, samples){
   if (!charts[sensorId] || !Array.isArray(samples)) return;
-  const chart = charts[sensorId];
-  const arr = chart.data.datasets[0].data;
-  // Spread batch timestamps evenly, ending at now
+  const arr = charts[sensorId].data.datasets[0].data;
   const batchEnd = Date.now();
   const batchStart = batchEnd - (samples.length - 1) * SAMPLE_INTERVAL_MS;
   samples.forEach((sample, index) => {
@@ -747,16 +771,36 @@ function pushChartBatch(sensorId, samples){
       deviceTs: Number(sample.ts) || null
     });
   });
-  updateDynamicYAxis(chart);
-  chart.update();
-  const lastSample = samples[samples.length - 1];
-  const lastValue = lastSample ? Number(lastSample.v) || 0 : 0;
-  const valueText = document.getElementById("value_" + sensorId);
-  if (valueText) {
-    valueText.textContent = lastValue.toFixed(2);
-  }
-  setSensorActive(sensorId, lastValue);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// renderLoop: the ONLY place charts are redrawn. Runs at ~30 fps via rAF.
+// Slides every chart's window to [now - 20s, now] so the x-axis advances in
+// real time and the waveform scrolls left smoothly.
+// ─────────────────────────────────────────────────────────────────────────────
+let lastRenderTime = 0;
+function renderLoop(timestamp){
+  if (timestamp - lastRenderTime >= RENDER_INTERVAL_MS) {
+    lastRenderTime = timestamp;
+    const now = Date.now();
+    const minX = now - WINDOW_MS;
+    allSensors.forEach(id => {
+      const chart = charts[id];
+      if (!chart) return;
+      chart.options.scales.x.min = minX;
+      chart.options.scales.x.max = now;
+      updateDynamicYAxis(chart);
+      chart.update("none");
+      const data = chart.data.datasets[0].data;
+      const last = data[data.length - 1];
+      const valueText = document.getElementById("value_" + id);
+      if (valueText && last) valueText.textContent = (last.y || 0).toFixed(2);
+      setSensorActive(id);
+    });
+  }
+  requestAnimationFrame(renderLoop);
+}
+requestAnimationFrame(renderLoop);
 
 function parsePiezoPayload(payloadText, systemName){
   let data;
@@ -825,12 +869,13 @@ function updateEnvironmentDisplay(){
 
 function generateRandomFallbackData(){
   tick++;
+  const now = Date.now();
   allSensors.forEach((id, idx) => {
     const pulse =
       Math.exp(-Math.pow(((tick % 90) - 45 - idx * 2) / 10, 2)) * (20 + idx * 9);
     const noise =
       Math.sin((tick + idx * 12) / 5) * 3 + (Math.random() - 0.5) * 2;
-    pushChartValue(id, pulse + noise);
+    pushChartValue(id, pulse + noise, now);
   });
   latestEnvironment.temperature =
     22 + Math.sin(tick / 80) * 1.5 + (Math.random() - 0.5) * 0.25;
@@ -1003,6 +1048,8 @@ function connectMqtt(){
   }
 }
 
+// mainLoop: data-side housekeeping only (fallback generation, badges, features).
+// Chart drawing is handled separately by renderLoop.
 function mainLoop(){
   const now = Date.now();
   const mqttDataIsFresh = mqttConnected && now - lastMqttMessageTime < 3000;
