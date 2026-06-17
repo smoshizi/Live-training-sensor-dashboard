@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Live Training Sensor Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <style>
   body{
@@ -552,21 +553,16 @@ function showTab(id, btn){
   btn.classList.add("active");
 }
 
-function formatTimeLabel(ms){
-  const d = new Date(ms);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const s = String(d.getSeconds()).padStart(2, "0");
-  const tenth = Math.floor(d.getMilliseconds() / 100);
-  return `${h}:${m}:${s}.${tenth}`;
-}
-
-function makeInitialTimeLabels(){
+// Build the initial {x, y} point array.
+// x = real Unix ms timestamp, y = 0.
+// Using {x,y} objects with Chart.js time scale means the axis is driven by
+// actual data coordinates — it updates correctly on every chart.update().
+function makeInitialData() {
   const now = Date.now();
-  return Array.from({ length: CHART_POINTS }, (_, i) => {
-    const t = now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS;
-    return formatTimeLabel(t);
-  });
+  return Array.from({ length: CHART_POINTS }, (_, i) => ({
+    x: now - (CHART_POINTS - 1 - i) * SAMPLE_INTERVAL_MS,
+    y: 0
+  }));
 }
 
 function logMqtt(message){
@@ -616,10 +612,9 @@ function makePlot(id, parent){
   charts[id] = new Chart(ctx, {
     type: "line",
     data: {
-      labels: makeInitialTimeLabels(),
       datasets: [{
         label: id,
-        data: Array(CHART_POINTS).fill(0),
+        data: makeInitialData(),   // {x: timestamp_ms, y: value} objects
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.15,
@@ -635,15 +630,21 @@ function makePlot(id, parent){
       },
       scales: {
         x: {
-          display: true,
+          type: "time",
+          time: {
+            unit: "second",
+            stepSize: 4,
+            displayFormats: { second: "HH:mm:ss" }
+          },
           ticks: {
             maxTicksLimit: 6,
             maxRotation: 0,
-            autoSkip: true
+            autoSkip: true,
+            source: "auto"
           },
           title: {
             display: true,
-            text: "Real time"
+            text: "Real time (HH:MM:SS)"
           }
         },
         y: {
@@ -669,8 +670,9 @@ function setSensorActive(sensorId, value){
   if (!sensor) return;
   if (!charts[sensorId]) return;
 
+  // Data is now {x, y} objects — extract y values for analysis
   const data = charts[sensorId].data.datasets[0].data
-    .map(Number)
+    .map(pt => pt.y)
     .filter(v => Number.isFinite(v));
 
   if (data.length === 0) return;
@@ -679,17 +681,11 @@ function setSensorActive(sensorId, value){
   const absPeak = Math.max(...absData);
   const absAvg = absData.reduce((sum, v) => sum + v, 0) / absData.length;
 
-  // Standard deviation of absolute values to measure noise floor
   const variance = absData.reduce((sum, v) => sum + Math.pow(v - absAvg, 2), 0) / absData.length;
   const stdDev = Math.sqrt(variance);
-
-  // Noise floor is the average plus one standard deviation
   const noiseFloor = absAvg + stdDev;
-
-  // Minimum absolute threshold to ignore truly flat/near-zero signals
   const MIN_THRESHOLD = 3;
 
-  // Light up only if peak is meaningfully above the noise floor
   if (absPeak > MIN_THRESHOLD && absPeak > 3 * noiseFloor) {
     sensor.classList.add("active");
   } else {
@@ -698,8 +694,9 @@ function setSensorActive(sensorId, value){
 }
 
 function updateDynamicYAxis(chart){
+  // Data is now {x, y} objects — extract y values
   const values = chart.data.datasets[0].data
-    .map(Number)
+    .map(pt => pt.y)
     .filter(v => Number.isFinite(v));
   if (values.length === 0) return;
   let min = Math.min(...values);
@@ -713,19 +710,16 @@ function updateDynamicYAxis(chart){
   chart.options.scales.y.max = max + padding;
 }
 
-function pushChartValue(sensorId, value, timestampMs = Date.now()){
+function pushChartValue(sensorId, value){
   if (!charts[sensorId]) return;
   const numericValue = Number(value) || 0;
   latestSensorValues[sensorId] = numericValue;
   const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
-  const labels = chart.data.labels;
   arr.shift();
-  labels.shift();
-  arr.push(numericValue);
-  labels.push(formatTimeLabel(timestampMs));
+  arr.push({ x: Date.now(), y: numericValue });
   updateDynamicYAxis(chart);
-  chart.update("none");
+  chart.update();
   const valueText = document.getElementById("value_" + sensorId);
   if (valueText) {
     valueText.textContent = numericValue.toFixed(2);
@@ -737,25 +731,24 @@ function pushChartBatch(sensorId, samples){
   if (!charts[sensorId] || !Array.isArray(samples)) return;
   const chart = charts[sensorId];
   const arr = chart.data.datasets[0].data;
-  const labels = chart.data.labels;
-  const batchStartTime = Date.now() - (samples.length - 1) * SAMPLE_INTERVAL_MS;
+  // Spread batch timestamps evenly, ending at now
+  const batchEnd = Date.now();
+  const batchStart = batchEnd - (samples.length - 1) * SAMPLE_INTERVAL_MS;
   samples.forEach((sample, index) => {
     const numericValue = Number(sample.v) || 0;
-    const liveTimestamp = batchStartTime + index * SAMPLE_INTERVAL_MS;
+    const ts = batchStart + index * SAMPLE_INTERVAL_MS;
     arr.shift();
-    labels.shift();
-    arr.push(numericValue);
-    labels.push(formatTimeLabel(liveTimestamp));
+    arr.push({ x: ts, y: numericValue });
     latestSensorValues[sensorId] = numericValue;
     eventHistoryBuffer.push({
       sensorId,
       value: numericValue,
-      ts: liveTimestamp,
+      ts,
       deviceTs: Number(sample.ts) || null
     });
   });
   updateDynamicYAxis(chart);
-  chart.update("none");
+  chart.update();
   const lastSample = samples[samples.length - 1];
   const lastValue = lastSample ? Number(lastSample.v) || 0 : 0;
   const valueText = document.getElementById("value_" + sensorId);
@@ -832,13 +825,12 @@ function updateEnvironmentDisplay(){
 
 function generateRandomFallbackData(){
   tick++;
-  const now = Date.now();
   allSensors.forEach((id, idx) => {
     const pulse =
       Math.exp(-Math.pow(((tick % 90) - 45 - idx * 2) / 10, 2)) * (20 + idx * 9);
     const noise =
       Math.sin((tick + idx * 12) / 5) * 3 + (Math.random() - 0.5) * 2;
-    pushChartValue(id, pulse + noise, now);
+    pushChartValue(id, pulse + noise);
   });
   latestEnvironment.temperature =
     22 + Math.sin(tick / 80) * 1.5 + (Math.random() - 0.5) * 0.25;
