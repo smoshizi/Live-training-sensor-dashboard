@@ -166,7 +166,7 @@
   }
   .training-buttons{
     display:grid;
-    grid-template-columns:repeat(3,1fr);
+    grid-template-columns:repeat(4,1fr);
     gap:12px;
     margin:16px 0;
   }
@@ -388,14 +388,14 @@
             Vehicle direction: top → bottom
           </div>
           <div class="arrow"></div>
-          <div id="map_B1" class="sensor" style="left:80%;top:12.5%">B1</div>
-          <div id="map_A1" class="sensor" style="left:20%;top:12.5%">A1</div>
-          <div id="map_A2" class="sensor" style="left:20%;top:25%">A2</div>
-          <div id="map_B2" class="sensor" style="left:80%;top:37.5%">B2</div>
-          <div id="map_B4" class="sensor" style="left:80%;top:50%">B4</div>
-          <div id="map_A3" class="sensor" style="left:20%;top:37.5%">A3</div>
-          <div id="map_B3" class="sensor" style="left:20%;top:62.5%">B3</div>
-          <div id="map_A4" class="sensor" style="left:80%;top:62.5%">A4</div>
+          <div id="map_B1" class="sensor" style="left:37.5%;top:12.5%">B1</div>
+          <div id="map_A1" class="sensor" style="left:75%;top:12.5%">A1</div>
+          <div id="map_A2" class="sensor" style="left:75%;top:25%">A2</div>
+          <div id="map_B2" class="sensor" style="left:37.5%;top:37.5%">B2</div>
+          <div id="map_B4" class="sensor" style="left:50%;top:37.5%">B4</div>
+          <div id="map_A3" class="sensor" style="left:75%;top:37.5%">A3</div>
+          <div id="map_B3" class="sensor" style="left:37.5%;top:62.5%">B3</div>
+          <div id="map_A4" class="sensor" style="left:50%;top:62.5%">A4</div>
         </div>
       </div>
     </div>
@@ -415,6 +415,7 @@
           <div class="feature"><b>Top→bottom score</b><br><span id="directionScore">--</span></div>
         </div>
         <div class="training-buttons">
+          <button onclick="addTraining('No Load')">⭕ No Load (N)</button>
           <button onclick="addTraining('Pedestrian')">🚶 Pedestrian (P)</button>
           <button onclick="addTraining('Light car')">🚗 Light Car (L)</button>
           <button onclick="addTraining('Heavy car')">🚛 Heavy Car (H)</button>
@@ -455,7 +456,7 @@
           Clear Selected Event
         </button>
         <p style="color:#6b7280">
-          Target: 30 labelled 20-second windows per class. Press P/L/H once after the full vehicle or pedestrian event appears inside the 20-second window.
+          Target: 30 labelled 20-second windows per class. Press N for No Load, or P/L/H once after the full vehicle or pedestrian event appears inside the 20-second window.
         </p>
       </div>
     </div>
@@ -553,21 +554,21 @@ const RAW_BUFFER_MS = WINDOW_MS;
 const EVENT_THRESHOLD = 5;
 
 const SLAB_TOP_Y = 0.0;
-const SLAB_BOTTOM_Y = 4.0;
+const SLAB_BOTTOM_Y = -4.0;
 
 const sensorIdsA = ["A1", "A2", "A3", "A4"];
 const sensorIdsB = ["B1", "B2", "B3", "B4"];
 const allSensors = [...sensorIdsB, ...sensorIdsA];
 
 const sensorPositions = {
-  B1: { x: 1.50, y: 0.5 },
-  A1: { x: 0.90, y: 0.5 },
-  A2: { x: 0.90, y: 1.0 },
-  B2: { x: 1.50, y: 1.50 },
-  B4: { x: 1.50, y: 2.0 },
-  A3: { x: 0.90, y: 1.5 },
-  B3: { x: 0.90, y: 2.5 },
-  A4: { x: 1.50, y: 2.5 }
+  B1: { x: 1.50, y: -0.5 },
+  A1: { x: 3.00, y: -0.5 },
+  A2: { x: 3.00, y: -1.0 },
+  B2: { x: 1.50, y: -1.5 },
+  B4: { x: 2.00, y: -1.5 },
+  A3: { x: 3.00, y: -1.5 },
+  B3: { x: 1.50, y: -2.5 },
+  A4: { x: 2.00, y: -2.5 }
 };
 
 function getFeatureKeys(){
@@ -626,6 +627,7 @@ let currentFeatures = {
 
 let trainingActive = false;
 let counts = {
+  "No Load": 0,
   "Pedestrian": 0,
   "Light car": 0,
   "Heavy car": 0
@@ -671,6 +673,7 @@ function clearKnnModel(){
 
 function rebuildCountsFromSamples(){
   counts = {
+    "No Load": 0,
     "Pedestrian": 0,
     "Light car": 0,
     "Heavy car": 0
@@ -684,6 +687,7 @@ function rebuildCountsFromSamples(){
 }
 
 function getIconForLabel(label){
+  if (label === "No Load") return "⭕";
   if (label === "Pedestrian") return "🚶";
   if (label === "Light car") return "🚗";
   if (label === "Heavy car") return "🚛";
@@ -1262,7 +1266,7 @@ function computeFeaturesFromWindowSamples(windowSamples, startTs, endTs){
     const timeRange = Math.max(1, maxT - minT);
 
     const normalized = firingPairs.map(p => ({
-      y: (p.y - SLAB_TOP_Y) / Math.max(1, SLAB_BOTTOM_Y - SLAB_TOP_Y),
+      y: (SLAB_TOP_Y - p.y) / Math.max(1, SLAB_TOP_Y - SLAB_BOTTOM_Y),
       t: (p.t - minT) / timeRange
     }));
 
@@ -1373,7 +1377,7 @@ function classifyWithKnn(features){
     return null;
   }
 
-  if (!features || features.activeSensors === 0 || features.totalEnergy < EVENT_THRESHOLD) {
+  if (!features) {
     return {
       label: "No event",
       icon: "⏳",
@@ -1583,7 +1587,7 @@ function toggleTraining(){
   const s = document.getElementById("trainStatus");
   s.className = trainingActive ? "status on" : "status";
   s.textContent = trainingActive
-    ? "Training active. Press P/L/H once after the event appears in the 20-second window."
+    ? "Training active. Press N for No Load, or P/L/H once after the event appears in the 20-second window."
     : "Training paused. Labelled samples are saved in this browser.";
 }
 
@@ -1616,10 +1620,19 @@ function addTraining(label){
     return;
   }
 
-  if (windowFeatures.activeSensors === 0) {
+  if (windowFeatures.activeSensors === 0 && label !== "No Load") {
     const proceed = confirm(
       "No strong sensor activity was found in the last 20 seconds.\n\n" +
       "Do you still want to save this as " + label + "?"
+    );
+
+    if (!proceed) return;
+  }
+
+  if (label === "No Load" && windowFeatures.activeSensors > 0) {
+    const proceed = confirm(
+      "Sensor activity was found in the last 20 seconds.\n\n" +
+      "Do you still want to save this as No Load?"
     );
 
     if (!proceed) return;
@@ -1647,6 +1660,7 @@ function addTraining(label){
 
 document.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
+  if (k === "n") addTraining("No Load");
   if (k === "p") addTraining("Pedestrian");
   if (k === "l") addTraining("Light car");
   if (k === "h") addTraining("Heavy car");
@@ -1786,6 +1800,7 @@ function trainKnnModel(){
   alert(
     "KNN model trained with full 20-second-window features.\n\n" +
     "Total samples: " + validSamples.length + "\n" +
+    "No Load: " + counts["No Load"] + "\n" +
     "Pedestrian: " + counts["Pedestrian"] + "\n" +
     "Light car: " + counts["Light car"] + "\n" +
     "Heavy car: " + counts["Heavy car"] + "\n\n" +
@@ -1881,6 +1896,7 @@ function importTrainingData(event){
       alert(
         "Training data imported successfully.\n\n" +
         "Total samples: " + trainingSamples.length + "\n" +
+        "No Load: " + counts["No Load"] + "\n" +
         "Pedestrian: " + counts["Pedestrian"] + "\n" +
         "Light car: " + counts["Light car"] + "\n" +
         "Heavy car: " + counts["Heavy car"] + "\n\n" +
